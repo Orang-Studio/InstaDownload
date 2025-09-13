@@ -17,8 +17,7 @@ Originally built with a server backend, it’s now fully self-contained using [C
 
 | Light theme | Dark theme |
 |-------------|------------|
-| ![Light Theme](/img/lighttheme.png) | ![Dark Theme](/img/darktheme.png) |
-
+| <img src="/img/lighttheme.png" width="250"/> | <img src="/img/darktheme.png" width="250"/> |
 
 ---
 
