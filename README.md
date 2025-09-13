@@ -14,7 +14,11 @@ Originally built with a server backend, it’s now fully self-contained using [C
 ---
 
 ## 📸 Screenshots
-Will be added later
+
+| Light theme | Dark theme |
+|-------------|------------|
+| ![Light Theme](/img/lighttheme.png) | ![Dark Theme](/img/darktheme.png) |
+
 
 ---
 
