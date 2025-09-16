@@ -33,7 +33,7 @@ Originally built with a server backend, it’s now fully self-contained using [C
 
 ### Clone
 ```bash
-git clone https://github.com/your-username/InstaDownload.git
+git clone https://github.com/InterJava-Studios/InstaDownload.git
 cd InstaDownload
 ````
 
