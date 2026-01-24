@@ -1,19 +1,19 @@
 # InstaDownload
 
-📱 **InstaDownload** is an Android app for downloading Instagram videos directly to your phone.  
+**InstaDownload** is an Android app for downloading Instagram videos directly to your phone.  
 Originally built with a server backend, it’s now fully self-contained using [Chaquopy](https://chaquo.com/chaquopy/) to run [Instaloader](https://instaloader.github.io/) (a Python library) inside the APK.  
 
 ---
 
-## ✨ Features
-- 🔗 Paste an Instagram post URL and download the video directly.
-- 🚀 Everything runs locally on your device.
-- 🐍 Integrated Python (via Chaquopy) with Instaloader 4.13.2.
-- 📂 Videos are saved to your device storage.
+## Features
+-  Paste an Instagram post URL and download the video directly.
+-  Everything runs locally on your device.
+-  Integrated Python (via Chaquopy) with Instaloader 4.13.2.
+-  Videos are saved to your device storage.
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 | Light theme | Dark theme |
 |-------------|------------|
@@ -21,7 +21,7 @@ Originally built with a server backend, it’s now fully self-contained using [C
 
 ---
 
-## 🏗️ Build Instructions
+## Build Instructions
 
 ### Prerequisites
 - Android Studio (Giraffe or newer recommended).
@@ -73,7 +73,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
-## 🚀 Usage
+## Usage
 
 1. Copy an Instagram post URL (must be a public post or a private one you have access to).
 2. Open **InstaDownload** and paste the link.
@@ -82,13 +82,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This project is for **educational purposes**.
 Respect Instagram’s [Terms of Service](https://help.instagram.com/581066165581870) and only download content you have rights to.
 
 ---
 
-## 📜 License
+## License
 
 MIT License – see [LICENSE](LICENSE) for details.
