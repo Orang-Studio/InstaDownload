@@ -1,0 +1,15 @@
+InstaDownload lets you download Instagram videos directly to your phone without any server backend. Everything runs locally on your device — no external servers, no tracking, no ads.
+
+Simply paste an Instagram post URL, tap Download, and the video is saved to your Downloads folder. Carousel posts (posts with multiple photos or videos) are fully supported.
+
+Built with Chaquopy to run Instaloader (an open-source Python library) inside the APK, so no API keys or cloud services are needed.
+
+Features:
+• Paste any Instagram post URL to download the video
+• Fully local — runs entirely on your device
+• Supports carousel posts (multiple media items)
+• Videos saved to your Downloads folder
+• Light and dark theme support
+• Share directly from Instagram to trigger a download
+
+Note: Only download content you have the right to download. Respect Instagram's Terms of Service and only use this app for content you own or have permission to save.

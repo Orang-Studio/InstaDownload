@@ -1,0 +1,5 @@
+• Added support for carousel posts (download multiple videos/images from a single post)
+• Integrated Instaloader 4.13.2 for improved compatibility
+• Fully self-contained — no server backend required
+• Light and dark theme support
+• Share Instagram URLs directly from the Instagram app

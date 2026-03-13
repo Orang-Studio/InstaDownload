@@ -1,0 +1,47 @@
+Categories:
+  - Multimedia
+License: MIT
+AuthorName: Vakarux12
+SourceCode: https://github.com/Orang-Studio/InstaDownload
+IssueTracker: https://github.com/Orang-Studio/InstaDownload/issues
+
+Name: InstaDownload
+Summary: Download Instagram videos directly to your device
+Description: |-
+  InstaDownload lets you download Instagram videos directly to your phone
+  without any server backend. Everything runs locally on your device.
+
+  Paste an Instagram post URL, tap Download, and the video is saved to
+  your Downloads folder. Supports both public posts and private posts
+  you have access to. Carousel posts (multiple media) are also supported.
+
+  Built with Chaquopy to run Instaloader (a Python library) inside the APK,
+  so no external server or API keys are required.
+
+  Features:
+  * Paste any Instagram post URL and download the video
+  * Fully local — no server, no tracking, no ads
+  * Supports carousel posts (multiple videos/images)
+  * Videos saved to the Downloads folder
+  * Light and dark theme support
+
+  Note: Only download content you have permission to download. Respect
+  Instagram's Terms of Service.
+
+RepoType: git
+Repo: https://github.com/Orang-Studio/InstaDownload
+
+Builds:
+  - versionName: 1.2.0
+    versionCode: 2
+    commit: v1.2.0
+    subdir: InstaDownload
+    gradle:
+      - release
+    prebuild:
+      - sdk install build-tools;35.0.0
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags v(.+)
+CurrentVersion: 1.2.0
+CurrentVersionCode: 2
