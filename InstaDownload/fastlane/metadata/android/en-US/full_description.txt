@@ -1,0 +1,20 @@
+InstaDownload lets you save Instagram reels and photos directly to your Downloads folder — no account required.
+
+Paste any public Instagram reel or post URL and tap Download. The file saves to your Downloads folder and you get a notification when it's done.
+
+Features:
+* Download reels as MP4 video files
+* Download photos as JPG image files
+* Paste button for quick URL input
+* Works with instagram.com/reel/, /p/, and /tv/ links
+* No account or login required
+* No ads, no tracking, no analytics
+* Fully open source
+
+Permissions:
+* Internet — to fetch the media
+* Storage — to save files (Android 9 and below only)
+* Notifications — for download completion alerts
+* Vibrate — for haptic feedback
+
+Source code: https://github.com/Orang-Studio/InstaDownload

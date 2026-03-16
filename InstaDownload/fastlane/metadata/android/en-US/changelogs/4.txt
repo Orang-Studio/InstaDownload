@@ -1,0 +1,6 @@
+* Added image download support (JPG for photos, MP4 for reels)
+* Added haptic feedback on download start and completion
+* Added success card showing download status inline
+* Improved error messages with full copyable error details
+* Fixed download completion detection on Android 12+
+* Removed Python/Chaquopy dependency — fully native Kotlin
