@@ -13,8 +13,8 @@ android {
         minSdk = 24  // Android 7.0 (Nougat)
         //noinspection OldTargetApi
         targetSdk = 35
-        versionCode = 3
-        versionName = "2.0.0"  // Removed Chaquopy/Python - native Kotlin downloader
+        versionCode = 4
+        versionName = "2.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -23,9 +23,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -81,7 +91,7 @@ dependencies {
 
     // HTTP client for network requests
     implementation(libs.okhttp)
-    implementation(libs.logging.interceptor) // For debugging network calls
+    debugImplementation(libs.logging.interceptor)
 
     // JSON parsing
     implementation(libs.gson)
