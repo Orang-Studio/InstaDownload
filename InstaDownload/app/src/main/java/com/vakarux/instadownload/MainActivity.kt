@@ -40,7 +40,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.regex.Pattern
 import androidx.core.net.toUri
-import com.chaquo.python.Python
 
 class MainActivity : ComponentActivity() {
 
@@ -369,11 +368,7 @@ class MainActivity : ComponentActivity() {
     private suspend fun downloadInstagramVideo(url: String, context: Context) {
         withContext(Dispatchers.IO) {
             try {
-                // Call Python: direct_video_url(url, username, password)
-                val py = Python.getInstance()
-                val mod = py.getModule("ig_dl")
-                val pyResult = mod.callAttr("direct_video_url", url, null, null)
-                val videoUrl = pyResult.toString().takeIf { it != "None" && it.startsWith("http") }
+                val videoUrl = InstagramDownloader.getVideoUrl(url)
 
                 withContext(Dispatchers.Main) {
                     if (videoUrl != null) {

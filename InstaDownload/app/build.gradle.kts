@@ -2,7 +2,6 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.chaquo.python")
 }
 
 android {
@@ -14,13 +13,8 @@ android {
         minSdk = 24  // Android 7.0 (Nougat)
         //noinspection OldTargetApi
         targetSdk = 35
-        versionCode = 2  // Updated version for new features
-        versionName = "1.2.0"  // Updated version name
-
-        ndk {
-            // Use both if you build for emulators and modern devices
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
+        versionCode = 3
+        versionName = "2.0.0"  // Removed Chaquopy/Python - native Kotlin downloader
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -65,17 +59,6 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = false
         unitTests.all { it.enabled = false }   // disable unit tests
-    }
-}
-chaquopy {
-    defaultConfig {
-        // Optional: pick a Python version. If you omit, Chaquopy chooses a default.
-        version = "3.11"
-        //buildPython("C:/Python311/python.exe")
-        // Install Instaloader into the APK at build time
-        pip {
-            install("instaloader==4.13.2") // current stable on PyPI
-        }
     }
 }
 dependencies {
