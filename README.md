@@ -1,7 +1,6 @@
 # InstaDownload
 
-**InstaDownload** is an Android app for downloading Instagram videos directly to your phone.  
-Originally built with a server backend, it’s now fully self-contained  
+**InstaDownload** is an Android app for downloading Instagram videos directly to your phone with no ads.  
 
 ---
 
