@@ -1,14 +1,13 @@
 # InstaDownload
 
 **InstaDownload** is an Android app for downloading Instagram videos directly to your phone.  
-Originally built with a server backend, it’s now fully self-contained using [Chaquopy](https://chaquo.com/chaquopy/) to run [Instaloader](https://instaloader.github.io/) (a Python library) inside the APK.  
+Originally built with a server backend, it’s now fully self-contained  
 
 ---
 
 ## Features
 -  Paste an Instagram post URL and download the video directly.
 -  Everything runs locally on your device.
--  Integrated Python (via Chaquopy) with Instaloader 4.13.2.
 -  Videos are saved to your device storage.
 
 ---
@@ -27,31 +26,12 @@ Originally built with a server backend, it’s now fully self-contained using [C
 - Android Studio (Giraffe or newer recommended).
 - Gradle 8.x (comes with Android Studio).
 - JDK 17.
-- Python 3.11 installed locally (for Chaquopy build).
-  - Example path: `C:/Miniconda3/envs/py311/python.exe`
-- Internet connection (first build downloads Chaquopy/Instaloader dependencies).
 
 ### Clone
 ```bash
 git clone https://github.com/InterJava-Studio/InstaDownload.git
 cd InstaDownload
 ````
-
-### Configure Chaquopy
-
-In `app/build.gradle.kts`, check this section:
-
-```kotlin
-chaquopy {
-    defaultConfig {
-        version = "3.11"
-        buildPython("C:/Miniconda3/envs/py311/python.exe")
-        pip {
-            install("instaloader==4.14.2")
-        }
-    }
-}
-```
 
 ### Build APK
 
