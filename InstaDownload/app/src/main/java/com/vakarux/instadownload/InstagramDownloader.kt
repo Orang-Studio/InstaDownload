@@ -43,7 +43,7 @@ object InstagramDownloader {
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaUrl(postUrl: String): MediaResult {
+    fun getMediaItems(postUrl: String): List<MediaResult> {
         val shortcode = extractShortcode(postUrl)
             ?: throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
 
@@ -69,7 +69,7 @@ object InstagramDownloader {
     }
 
     // ── Strategy 1: embed page ──────────────────────────────────────────────
-    private fun tryEmbedPage(shortcode: String): MediaResult {
+    private fun tryEmbedPage(shortcode: String): List<MediaResult> {
         val response = client.newCall(
             Request.Builder()
                 .url("https://www.instagram.com/p/$shortcode/embed/captioned/")
@@ -88,13 +88,13 @@ object InstagramDownloader {
         fun String.unescape() = replace("\\/", "/").replace("\\u0026", "&")
 
         Regex(""""video_url":"(https://[^"]+)"""").find(html)?.let {
-            return MediaResult(it.groupValues[1].unescape(), isVideo = true)
+            return listOf(MediaResult(it.groupValues[1].unescape(), isVideo = true))
         }
         Regex(""""display_url":"(https://[^"]+)"""").find(html)?.let {
-            return MediaResult(it.groupValues[1].unescape(), isVideo = false)
+            return listOf(MediaResult(it.groupValues[1].unescape(), isVideo = false))
         }
         Regex("""<meta property="og:image" content="([^"]+)"""").find(html)?.let {
-            return MediaResult(it.groupValues[1].unescape(), isVideo = false)
+            return listOf(MediaResult(it.groupValues[1].unescape(), isVideo = false))
         }
 
         throw Exception("Embed HTTP ${response.code}: no media URL found (${html.length} chars)")
@@ -108,7 +108,7 @@ object InstagramDownloader {
     // IMPORTANT: Do NOT visit the reel page before this call — doing so causes
     // Instagram to return an HTML soft-gate instead of JSON for subsequent
     // GraphQL requests on the same session.
-    private fun tryGraphQL(shortcode: String): MediaResult {
+    private fun tryGraphQL(shortcode: String): List<MediaResult> {
         // Step 1: warm up session — get csrftoken cookie
         client.newCall(
             Request.Builder()
@@ -158,14 +158,33 @@ object InstagramDownloader {
             throw Exception("GraphQL HTTP ${resp.code}: JSON parse failed — ${respBody.take(150)}")
         } ?: throw Exception("GraphQL HTTP ${resp.code}: xdt_shortcode_media=null — ${respBody.take(150)}")
 
+        // Carousel / sidecar post — return all slides
+        val edges = media.optJSONObject("edge_sidecar_to_children")
+            ?.optJSONArray("edges")
+        if (edges != null && edges.length() > 0) {
+            val items = mutableListOf<MediaResult>()
+            for (i in 0 until edges.length()) {
+                val node = edges.getJSONObject(i).getJSONObject("node")
+                if (node.optBoolean("is_video", false)) {
+                    val url = node.optString("video_url").takeIf { it.isNotEmpty() } ?: continue
+                    items += MediaResult(url, isVideo = true)
+                } else {
+                    val url = node.optString("display_url").takeIf { it.isNotEmpty() } ?: continue
+                    items += MediaResult(url, isVideo = false)
+                }
+            }
+            if (items.isNotEmpty()) return items
+        }
+
+        // Single photo or video
         return if (media.optBoolean("is_video", false)) {
             val url = media.optString("video_url").takeIf { it.isNotEmpty() }
                 ?: throw Exception("GraphQL: is_video=true but video_url empty")
-            MediaResult(url, isVideo = true)
+            listOf(MediaResult(url, isVideo = true))
         } else {
             val url = media.optString("display_url").takeIf { it.isNotEmpty() }
                 ?: throw Exception("GraphQL: display_url empty")
-            MediaResult(url, isVideo = false)
+            listOf(MediaResult(url, isVideo = false))
         }
     }
 
