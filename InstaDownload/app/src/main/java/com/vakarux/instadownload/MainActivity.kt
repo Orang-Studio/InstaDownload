@@ -476,7 +476,7 @@ class MainActivity : ComponentActivity() {
         val uriHandler = LocalUriHandler.current
 
         TextButton(
-            onClick = { uriHandler.openUri("https://github.com/Vakarux12") },
+            onClick = { uriHandler.openUri("https://github.com/Orang-Studio/InstaDownload") },
             shape = RoundedCornerShape(12.dp)
         ) {
             Box(
