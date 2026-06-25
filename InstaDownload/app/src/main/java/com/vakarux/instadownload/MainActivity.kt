@@ -71,14 +71,15 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { _ -> /* permission result handled inline */ }
 
-    private var downloadId: Long = -1
+    private val pendingDownloadIds = mutableSetOf<Long>()
     private var downloadCompleteCallback: (() -> Unit)? = null
 
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                if (id == downloadId) downloadCompleteCallback?.invoke()
+                pendingDownloadIds.remove(id)
+                if (pendingDownloadIds.isEmpty()) downloadCompleteCallback?.invoke()
             }
         }
     }
@@ -505,10 +506,13 @@ class MainActivity : ComponentActivity() {
     // ── Download logic ─────────────────────────────────────────────
 
     private suspend fun downloadInstagramVideo(url: String, context: Context) {
-        val result = withContext(Dispatchers.IO) {
-            InstagramDownloader.getMediaUrl(url)
+        val items = withContext(Dispatchers.IO) {
+            InstagramDownloader.getMediaItems(url)
         }
-        downloadId = startDownload(result.url, result.isVideo, context)
+        pendingDownloadIds.clear()
+        items.forEach { result ->
+            pendingDownloadIds += startDownload(result.url, result.isVideo, context)
+        }
     }
 
     private fun startDownload(mediaUrl: String, isVideo: Boolean, context: Context): Long {
