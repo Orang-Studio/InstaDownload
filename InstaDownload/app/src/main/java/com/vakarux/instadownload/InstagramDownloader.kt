@@ -100,67 +100,56 @@ object InstagramDownloader {
         throw Exception("Embed HTTP ${response.code}: no media URL found (${html.length} chars)")
     }
 
-    // ── Strategy 2: GraphQL with proper session ─────────────────────────────
-    // Instagram's web GraphQL requires:
-    //   1. Cookies from the main page (csrftoken etc.)
-    //   2. fb_dtsg anti-CSRF token extracted from the reel page HTML
-    //   3. Those cookies forwarded in the POST
+    // ── Strategy 2: GraphQL with session cookies ────────────────────────────
+    // Requires:
+    //   1. csrftoken cookie from homepage visit
+    //   2. X-CSRFToken header matching that cookie
+    //   3. X-IG-App-ID header
+    // IMPORTANT: Do NOT visit the reel page before this call — doing so causes
+    // Instagram to return an HTML soft-gate instead of JSON for subsequent
+    // GraphQL requests on the same session.
     private fun tryGraphQL(shortcode: String): MediaResult {
-        // Step 1: warm up session cookies
+        // Step 1: warm up session — get csrftoken cookie
         client.newCall(
             Request.Builder()
                 .url("https://www.instagram.com/")
                 .header("User-Agent", DESKTOP_UA)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
                 .get().build()
         ).execute().close()
-
-        // Step 2: visit reel page — sets more cookies and embeds fb_dtsg
-        val reelPage = client.newCall(
-            Request.Builder()
-                .url("https://www.instagram.com/reel/$shortcode/")
-                .header("User-Agent", DESKTOP_UA)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.8")
-                .header("Referer", "https://www.instagram.com/")
-                .get().build()
-        ).execute()
-        val reelHtml = reelPage.body?.string() ?: ""
-        reelPage.close()
-
-        // Step 3: extract fb_dtsg (Relay/React anti-CSRF token)
-        val fbDtsg = Regex(""""token":"(AdQ[^"]+)"""").find(reelHtml)?.groupValues?.get(1)
-            ?: Regex(""""fb_dtsg","[^"]*","[^"]*","([^"]+)"""").find(reelHtml)?.groupValues?.get(1)
-            ?: Regex(""""DTSGInitData"[^}]+"token":"([^"]+)"""").find(reelHtml)?.groupValues?.get(1)
 
         val csrfToken = cookieStore["www.instagram.com"]
             ?.firstOrNull { it.name == "csrftoken" }?.value ?: ""
 
-        // Step 4: POST to graphql with session cookies + fb_dtsg
+        // Step 2: POST to graphql — cookies are forwarded automatically by cookieJar
         val body = FormBody.Builder()
-            .addEncoded("variables", """{"shortcode":"$shortcode"}""")
+            .add("variables", """{"shortcode":"$shortcode"}""")
             .add("doc_id", "8845758582119845")
-            .add("server_timestamps", "true")
-            .apply { if (fbDtsg != null) add("fb_dtsg", fbDtsg) }
             .build()
 
-        val request = Request.Builder()
-            .url("https://www.instagram.com/graphql/query")
-            .post(body)
-            .header("User-Agent", DESKTOP_UA)
-            .header("Accept", "*/*")
-            .header("Accept-Language", "en-US,en;q=0.8")
-            .header("Referer", "https://www.instagram.com/reel/$shortcode/")
-            .header("X-IG-App-ID", "936619743392459")
-            .header("X-CSRFToken", csrfToken)
-            .header("X-FB-Friendly-Name", "PolarisPostRootQuery")
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .build()
+        val resp = client.newCall(
+            Request.Builder()
+                .url("https://www.instagram.com/graphql/query")
+                .post(body)
+                .header("User-Agent", DESKTOP_UA)
+                .header("Accept", "*/*")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Referer", "https://www.instagram.com/")
+                .header("X-IG-App-ID", "936619743392459")
+                .header("X-CSRFToken", csrfToken)
+                .build()
+        ).execute()
 
-        val resp = client.newCall(request).execute()
         val respBody = resp.body?.string()
-            ?: throw Exception("GraphQL HTTP ${resp.code}: empty body (fb_dtsg=${fbDtsg?.take(10)}, csrf=${csrfToken.take(10)})")
+            ?: throw Exception("GraphQL HTTP ${resp.code}: empty body")
+
+        // Detect HTML before attempting JSON parse (indicates login gate or CSRF failure)
+        if (respBody.trimStart().startsWith('<'))
+            throw Exception("GraphQL HTTP ${resp.code}: got HTML instead of JSON — csrf=${csrfToken.take(8)}, preview=${respBody.take(80)}")
+
         if (!resp.isSuccessful)
-            throw Exception("GraphQL HTTP ${resp.code}: ${respBody.take(200)} (fb_dtsg=${fbDtsg?.take(10)})")
+            throw Exception("GraphQL HTTP ${resp.code}: ${respBody.take(200)}")
 
         val media = try {
             JSONObject(respBody).getJSONObject("data")
