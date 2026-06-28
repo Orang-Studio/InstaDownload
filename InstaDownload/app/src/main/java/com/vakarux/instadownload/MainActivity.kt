@@ -73,14 +73,23 @@ class MainActivity : ComponentActivity() {
     ) { _ -> /* permission result handled inline */ }
 
     private val pendingDownloadIds = mutableSetOf<Long>()
-    private var downloadCompleteCallback: (() -> Unit)? = null
+    private var downloadCompleteCallback: ((failed: Boolean) -> Unit)? = null
+    private var anyDownloadFailed = false
 
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
                 pendingDownloadIds.remove(id)
-                if (pendingDownloadIds.isEmpty()) downloadCompleteCallback?.invoke()
+                // Check if this download actually succeeded
+                val dm = context?.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                val cursor = dm?.query(DownloadManager.Query().setFilterById(id))
+                if (cursor?.moveToFirst() == true) {
+                    val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                    if (status != DownloadManager.STATUS_SUCCESSFUL) anyDownloadFailed = true
+                }
+                cursor?.close()
+                if (pendingDownloadIds.isEmpty()) downloadCompleteCallback?.invoke(anyDownloadFailed)
             }
         }
     }
@@ -138,13 +147,18 @@ class MainActivity : ComponentActivity() {
         val colorScheme = MaterialTheme.colorScheme
 
         DisposableEffect(Unit) {
-            downloadCompleteCallback = {
+            downloadCompleteCallback = { failed ->
                 coroutineScope.launch {
-                    downloadComplete = true
-                    hapticComplete(context)
-                    delay(2500)
-                    downloadStarted = false
-                    downloadComplete = false
+                    if (failed) {
+                        downloadStarted = false
+                        fullError = "Download failed — the link may have expired, try again"
+                    } else {
+                        downloadComplete = true
+                        hapticComplete(context)
+                        delay(2500)
+                        downloadStarted = false
+                        downloadComplete = false
+                    }
                 }
             }
             onDispose { downloadCompleteCallback = null }
@@ -525,6 +539,7 @@ class MainActivity : ComponentActivity() {
             InstagramDownloader.getMediaItems(url)
         }
         pendingDownloadIds.clear()
+        anyDownloadFailed = false
         items.forEach { result ->
             pendingDownloadIds += startDownload(result.url, result.isVideo, context)
         }
