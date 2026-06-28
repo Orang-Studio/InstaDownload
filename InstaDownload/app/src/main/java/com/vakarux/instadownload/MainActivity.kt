@@ -1,12 +1,10 @@
 package com.vakarux.instadownload
 
 import android.Manifest
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -14,6 +12,7 @@ import android.os.Environment
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,7 +48,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -72,38 +70,8 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { _ -> /* permission result handled inline */ }
 
-    private val pendingDownloadIds = mutableSetOf<Long>()
-    private var downloadCompleteCallback: ((failed: Boolean) -> Unit)? = null
-    private var anyDownloadFailed = false
-
-    private val downloadReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
-                val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                pendingDownloadIds.remove(id)
-                // Check if this download actually succeeded
-                val dm = context?.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-                val cursor = dm?.query(DownloadManager.Query().setFilterById(id))
-                if (cursor?.moveToFirst() == true) {
-                    val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                    if (status != DownloadManager.STATUS_SUCCESSFUL) anyDownloadFailed = true
-                }
-                cursor?.close()
-                if (pendingDownloadIds.isEmpty()) downloadCompleteCallback?.invoke(anyDownloadFailed)
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val intentFilter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(downloadReceiver, intentFilter, RECEIVER_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(downloadReceiver, intentFilter)
-        }
 
         setContent {
             InstaDownloadTheme {
@@ -111,11 +79,6 @@ class MainActivity : ComponentActivity() {
                 InstagramDownloaderScreen(initialUrl = sharedUrl)
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        runCatching { unregisterReceiver(downloadReceiver) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -145,24 +108,6 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
         val colorScheme = MaterialTheme.colorScheme
-
-        DisposableEffect(Unit) {
-            downloadCompleteCallback = { failed ->
-                coroutineScope.launch {
-                    if (failed) {
-                        downloadStarted = false
-                        fullError = "Download failed — the link may have expired, try again"
-                    } else {
-                        downloadComplete = true
-                        hapticComplete(context)
-                        delay(2500)
-                        downloadStarted = false
-                        downloadComplete = false
-                    }
-                }
-            }
-            onDispose { downloadCompleteCallback = null }
-        }
 
         val igGradient = Brush.verticalGradient(
             colors = if (isSystemInDarkMode()) {
@@ -327,15 +272,33 @@ class MainActivity : ComponentActivity() {
                                         fullError = null
                                         downloadStarted = false
                                         downloadComplete = false
-                                        val result = runCatching {
-                                            downloadInstagramVideo(url.trim(), context)
+                                        val items = runCatching {
+                                            withContext(Dispatchers.IO) {
+                                                InstagramDownloader.getMediaItems(url.trim())
+                                            }
                                         }
                                         isLoading = false
-                                        if (result.isSuccess) {
-                                            hapticStart(context)
-                                            downloadStarted = true
+                                        if (items.isFailure) {
+                                            fullError = items.exceptionOrNull()?.message ?: "Something went wrong"
+                                            return@launch
+                                        }
+                                        hapticStart(context)
+                                        downloadStarted = true
+                                        val dlResult = runCatching {
+                                            withContext(Dispatchers.IO) {
+                                                items.getOrThrow().forEachIndexed { i, item ->
+                                                    saveToDownloads(item.url, item.isVideo, i, context)
+                                                }
+                                            }
+                                        }
+                                        downloadStarted = false
+                                        if (dlResult.isSuccess) {
+                                            hapticComplete(context)
+                                            downloadComplete = true
+                                            delay(2500)
+                                            downloadComplete = false
                                         } else {
-                                            fullError = result.exceptionOrNull()?.message ?: "Something went wrong"
+                                            fullError = dlResult.exceptionOrNull()?.message ?: "Download failed"
                                         }
                                     }
                                 }
@@ -534,32 +497,31 @@ class MainActivity : ComponentActivity() {
 
     // ── Download logic ─────────────────────────────────────────────
 
-    private suspend fun downloadInstagramVideo(url: String, context: Context) {
-        val items = withContext(Dispatchers.IO) {
-            InstagramDownloader.getMediaItems(url)
-        }
-        pendingDownloadIds.clear()
-        anyDownloadFailed = false
-        items.forEach { result ->
-            pendingDownloadIds += startDownload(result.url, result.isVideo, context)
-        }
-    }
-
-    private fun startDownload(mediaUrl: String, isVideo: Boolean, context: Context): Long {
-        val ts = System.currentTimeMillis()
+    private fun saveToDownloads(mediaUrl: String, isVideo: Boolean, index: Int, context: Context) {
+        val ts = System.currentTimeMillis() + index
         val fileName = if (isVideo) "instagram_video_$ts.mp4" else "instagram_image_$ts.jpg"
-        val title = if (isVideo) "Instagram Video" else "Instagram Image"
-        val request = DownloadManager.Request(mediaUrl.toUri()).apply {
-            setTitle(title)
-            setDescription("Downloading…")
-            setNotificationVisibility(
-                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
-            )
-            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-            addRequestHeader("User-Agent", "Mozilla/5.0 (Android)")
+        val mimeType = if (isVideo) "video/mp4" else "image/jpeg"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw Exception("Could not create file in Downloads")
+            resolver.openOutputStream(uri)?.use { out ->
+                InstagramDownloader.downloadToStream(mediaUrl, out)
+            }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        } else {
+            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val file = java.io.File(dir, fileName)
+            InstagramDownloader.downloadToStream(mediaUrl, file.outputStream())
         }
-        return (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager)
-            .enqueue(request)
     }
 
     private fun isValidInstagramUrl(url: String): Boolean =
