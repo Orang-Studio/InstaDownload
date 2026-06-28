@@ -1,0 +1,5 @@
+* Fixed media extraction — Instagram changed their embed page format
+* Added carousel/multi-image post support (downloads all images)
+* Replaced DownloadManager with direct download for reliability
+* Improved error messages with copy button
+* Fixed GraphQL error reporting
