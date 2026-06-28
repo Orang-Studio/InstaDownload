@@ -1,8 +1,9 @@
-name: Build Debug APK
+name: Build & Release
 
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -21,13 +22,37 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x InstaDownload/gradlew
 
-      - name: Build debug APK
+      - name: Generate signing keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore InstaDownload/app/release.jks \
+            -alias instadownload \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass instadownload \
+            -keypass instadownload \
+            -dname "CN=InstaDownload, O=Orang-Studio, C=US"
+
+      - name: Build release APK
         working-directory: InstaDownload
-        run: ./gradlew assembleDebug
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
+            -Pandroid.injected.signing.store.password=instadownload \
+            -Pandroid.injected.signing.key.alias=instadownload \
+            -Pandroid.injected.signing.key.password=instadownload
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: InstaDownload/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 7
+          name: InstaDownload-${{ github.ref_name }}
+          path: InstaDownload/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: InstaDownload/app/build/outputs/apk/release/app-release.apk
+          name: InstaDownload ${{ github.ref_name }}
+          generate_release_notes: true
