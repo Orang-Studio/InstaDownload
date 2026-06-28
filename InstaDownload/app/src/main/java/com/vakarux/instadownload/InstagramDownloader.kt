@@ -206,6 +206,19 @@ object InstagramDownloader {
         }
     }
 
+    fun downloadToStream(url: String, out: java.io.OutputStream) {
+        val response = client.newCall(
+            Request.Builder()
+                .url(url)
+                .header("User-Agent", MOBILE_UA)
+                .header("Referer", "https://www.instagram.com/")
+                .get().build()
+        ).execute()
+        if (!response.isSuccessful) throw Exception("Download HTTP ${response.code}")
+        response.body?.byteStream()?.copyTo(out)
+            ?: throw Exception("Empty download body")
+    }
+
     private fun extractShortcode(url: String): String? {
         val m = SHORTCODE_REGEX.matcher(url)
         return if (m.find()) m.group(1) else null
