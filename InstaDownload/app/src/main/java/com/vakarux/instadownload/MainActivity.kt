@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.*
@@ -398,13 +399,27 @@ class MainActivity : ComponentActivity() {
                                         fontWeight = FontWeight.Bold
                                     )
                                 )
-                                TextButton(onClick = { fullError = null }) {
-                                    Text(
-                                        "Dismiss",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            color = colorScheme.onErrorContainer
+                                Row {
+                                    IconButton(onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("Error", fullError)
+                                        clipboard.setPrimaryClip(clip)
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.ContentCopy,
+                                            contentDescription = "Copy error",
+                                            tint = colorScheme.onErrorContainer,
+                                            modifier = Modifier.size(18.dp)
                                         )
-                                    )
+                                    }
+                                    TextButton(onClick = { fullError = null }) {
+                                        Text(
+                                            "Dismiss",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                color = colorScheme.onErrorContainer
+                                            )
+                                        )
+                                    }
                                 }
                             }
                             SelectionContainer {

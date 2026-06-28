@@ -62,7 +62,7 @@ object InstagramDownloader {
         }
 
         throw Exception(
-            "Both strategies failed.\n" +
+            "Latest methods are patched, please open an issue\n\n" +
             "Embed: $embedError\n" +
             "GraphQL: $graphqlError"
         )
@@ -85,14 +85,24 @@ object InstagramDownloader {
         if (!response.isSuccessful)
             throw Exception("Embed HTTP ${response.code}: ${html.take(120)}")
 
-        fun String.unescape() = replace("\\/", "/").replace("\\u0026", "&")
+        // Instagram now double-encodes JSON inside the embed page:
+        // keys/values are delimited by \" and path separators are \\\/
+        fun String.unescape() = replace("\\\\\\/", "/").replace("\\u0026", "&")
 
-        Regex(""""video_url":"(https://[^"]+)"""").find(html)?.let {
+        // Single video
+        Regex("""\\"video_url\\":\\"(https:(?:(?!\\").)*)""").find(html)?.let {
             return listOf(MediaResult(it.groupValues[1].unescape(), isVideo = true))
         }
-        Regex(""""display_url":"(https://[^"]+)"""").find(html)?.let {
-            return listOf(MediaResult(it.groupValues[1].unescape(), isVideo = false))
-        }
+
+        // Single image or carousel (collect all unique display_url entries)
+        val images = Regex("""\\"display_url\\":\\"(https:(?:(?!\\").)*)""")
+            .findAll(html)
+            .map { MediaResult(it.groupValues[1].unescape(), isVideo = false) }
+            .distinctBy { it.url }
+            .toList()
+        if (images.isNotEmpty()) return images
+
+        // Fallback: OG image tag (plain HTML attribute, no double-encoding)
         Regex("""<meta property="og:image" content="([^"]+)"""").find(html)?.let {
             return listOf(MediaResult(it.groupValues[1].unescape(), isVideo = false))
         }
@@ -151,12 +161,20 @@ object InstagramDownloader {
         if (!resp.isSuccessful)
             throw Exception("GraphQL HTTP ${resp.code}: ${respBody.take(200)}")
 
-        val media = try {
-            JSONObject(respBody).getJSONObject("data")
-                .optJSONObject("xdt_shortcode_media")
+        val json = try {
+            JSONObject(respBody)
         } catch (e: Exception) {
             throw Exception("GraphQL HTTP ${resp.code}: JSON parse failed — ${respBody.take(150)}")
-        } ?: throw Exception("GraphQL HTTP ${resp.code}: xdt_shortcode_media=null — ${respBody.take(150)}")
+        }
+        // Surface API-level errors (e.g. stale doc_id returns data:null + errors array)
+        if (json.isNull("data")) {
+            val apiErr = json.optJSONArray("errors")
+                ?.optJSONObject(0)?.optString("message", "unknown") ?: "data is null"
+            throw Exception("GraphQL HTTP ${resp.code}: API error ($apiErr) — ${respBody.take(150)}")
+        }
+        val media = json.getJSONObject("data")
+            .optJSONObject("xdt_shortcode_media")
+            ?: throw Exception("GraphQL HTTP ${resp.code}: xdt_shortcode_media=null — ${respBody.take(150)}")
 
         // Carousel / sidecar post — return all slides
         val edges = media.optJSONObject("edge_sidecar_to_children")
