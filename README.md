@@ -16,6 +16,7 @@ An Android only app for downloading Instagram videos directly to your phone.
   <a href="https://github.com/Orang-Studio/InstaDownload/actions/workflows/build.yml">
     <img src="https://github.com/Orang-Studio/InstaDownload/actions/workflows/build.yml/badge.svg" width="190" alt="build status" />
   </a>
+  [![Download the app](https://img.shields.io/github/v/release/Orang-Studio/InstaDownload?label=Download%20app&color=2563eb)](https://github.com/Orang-Studio/InstaDownload/releases/latest)
 </p>
 
 ## Features
