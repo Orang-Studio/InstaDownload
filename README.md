@@ -2,7 +2,6 @@
 
 **InstaDownload** is an Android app for downloading Instagram videos directly to your phone with no ads.  
 
-## Star History
 
 <a href="https://www.star-history.com/?repos=Orang-Studio%2FInstaDownload&type=date&legend=top-left">
  <picture>
