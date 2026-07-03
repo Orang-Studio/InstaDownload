@@ -119,6 +119,8 @@ class MainActivity : ComponentActivity() {
         val colorScheme = MaterialTheme.colorScheme
         val uriHandler = LocalUriHandler.current
 
+        val isStory = isStoryUrl(url.trim())
+
         val igGradient = Brush.verticalGradient(
             colors = if (isSystemInDarkMode()) {
                 listOf(IgPurpleDark, IgPinkDark, IgOrangeDark)
@@ -296,13 +298,47 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(20.dp))
 
+                        AnimatedVisibility(
+                            visible = isStory,
+                            enter = fadeIn(tween(200)),
+                            exit = fadeOut(tween(200))
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 20.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = IgOrange.copy(alpha = 0.15f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        "Stories aren't supported",
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            color = IgOrange,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                    Text(
+                                        "Instagram only serves Stories to logged-in accounts, so they " +
+                                            "can't be downloaded here. Reels and posts work as usual.",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            color = colorScheme.onSurfaceVariant
+                                        ),
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+
                         Button(
                             onClick = {
                                 val trimmed = url.trim()
                                 when {
                                     trimmed.isBlank() -> urlError = "Please enter a URL"
                                     !isValidInstagramUrl(trimmed) ->
-                                        urlError = "Not a valid Instagram post, reel, or story URL"
+                                        urlError = "Not a valid Instagram post or reel URL"
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
                                     else -> coroutineScope.launch {
@@ -346,7 +382,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp),
-                            enabled = !isSaving,
+                            enabled = !isSaving && !isStory,
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = IgPink,
@@ -686,7 +722,12 @@ class MainActivity : ComponentActivity() {
 
     private fun isValidInstagramUrl(url: String): Boolean =
         Pattern.compile(
-            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/((p|reel|tv)/[A-Za-z0-9_-]+|stories/[A-Za-z0-9._]+/[0-9]+)/?.*"
+            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+/?.*"
+        ).matcher(url).matches()
+
+    private fun isStoryUrl(url: String): Boolean =
+        Pattern.compile(
+            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+/?.*"
         ).matcher(url).matches()
 
     private fun checkPermissions(): Boolean =
