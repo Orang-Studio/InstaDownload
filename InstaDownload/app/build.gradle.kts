@@ -9,7 +9,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.vakarux.instadownload"
+        applicationId = "com.oranges.instadownload"
         minSdk = 24  // Android 7.0 (Nougat)
         //noinspection OldTargetApi
         targetSdk = 35
