@@ -1,0 +1,5 @@
+* Added media preview before saving, with automatic preview as you paste a link
+* Added a retry button when extraction fails
+* Stories now show a clear "not supported" notice instead of a confusing error
+* New app icon — a download mark on the gradient
+* More forgiving link validation (accepts URLs with extra text)
