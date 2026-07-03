@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
@@ -78,13 +79,25 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { _ -> /* permission result handled inline */ }
 
+    private val sessionStore by lazy { SessionStore(this) }
+    private val loggedIn = mutableStateOf(false)
+
+    private val loginLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { loggedIn.value = sessionStore.isLoggedIn }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        loggedIn.value = sessionStore.isLoggedIn
 
         setContent {
             InstaDownloadTheme {
                 val sharedUrl = handleSharedIntent(intent)
-                InstagramDownloaderScreen(initialUrl = sharedUrl)
+                InstagramDownloaderScreen(
+                    initialUrl = sharedUrl,
+                    isLoggedIn = loggedIn.value,
+                    onLoginClick = { loginLauncher.launch(Intent(this, LoginActivity::class.java)) }
+                )
             }
         }
     }
@@ -105,7 +118,11 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun InstagramDownloaderScreen(initialUrl: String = "") {
+    fun InstagramDownloaderScreen(
+        initialUrl: String = "",
+        isLoggedIn: Boolean = false,
+        onLoginClick: () -> Unit = {}
+    ) {
         var url by remember { mutableStateOf(initialUrl) }
         var isLoading by remember { mutableStateOf(false) }
         var isSaving by remember { mutableStateOf(false) }
@@ -118,6 +135,9 @@ class MainActivity : ComponentActivity() {
         val coroutineScope = rememberCoroutineScope()
         val colorScheme = MaterialTheme.colorScheme
         val uriHandler = LocalUriHandler.current
+
+        val isStory = isStoryUrl(url.trim())
+        val needsLogin = isStory && !isLoggedIn
 
         val igGradient = Brush.verticalGradient(
             colors = if (isSystemInDarkMode()) {
@@ -296,13 +316,77 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        Button(
+                        AnimatedVisibility(
+                            visible = needsLogin,
+                            enter = fadeIn(tween(200)),
+                            exit = fadeOut(tween(200))
+                        ) {
+                            Column(modifier = Modifier.padding(bottom = 20.dp)) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = IgOrange.copy(alpha = 0.15f)
+                                    )
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(
+                                            "Stories require a login",
+                                            style = MaterialTheme.typography.labelLarge.copy(
+                                                color = IgOrange,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                        Text(
+                                            "Only logged-in accounts can see Stories on Instagram. " +
+                                                "You sign in here in the app, so your details never leave " +
+                                                "your device. Reels and posts download as usual, no login.",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                color = colorScheme.onSurfaceVariant
+                                            ),
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (needsLogin) {
+                            Button(
+                                onClick = onLoginClick,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = IgOrange,
+                                    contentColor = Color.White
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(
+                                    defaultElevation = 4.dp,
+                                    pressedElevation = 2.dp
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Login,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Log in to Instagram",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                        } else Button(
                             onClick = {
                                 val trimmed = url.trim()
                                 when {
                                     trimmed.isBlank() -> urlError = "Please enter a URL"
                                     !isValidInstagramUrl(trimmed) ->
-                                        urlError = "Not a valid Instagram post, reel, or story URL"
+                                        urlError = "Not a valid Instagram post or reel URL"
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
                                     else -> coroutineScope.launch {
@@ -686,7 +770,12 @@ class MainActivity : ComponentActivity() {
 
     private fun isValidInstagramUrl(url: String): Boolean =
         Pattern.compile(
-            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/((p|reel|tv)/[A-Za-z0-9_-]+|stories/[A-Za-z0-9._]+/[0-9]+)/?.*"
+            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+/?.*"
+        ).matcher(url).matches()
+
+    private fun isStoryUrl(url: String): Boolean =
+        Pattern.compile(
+            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+/?.*"
         ).matcher(url).matches()
 
     private fun checkPermissions(): Boolean =

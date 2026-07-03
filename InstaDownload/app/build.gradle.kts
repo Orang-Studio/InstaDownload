@@ -83,6 +83,8 @@ dependencies {
     implementation(libs.okhttp)
     debugImplementation(libs.logging.interceptor)
 
+    implementation(libs.androidx.security.crypto)
+
     // JSON parsing
     implementation(libs.gson)
 

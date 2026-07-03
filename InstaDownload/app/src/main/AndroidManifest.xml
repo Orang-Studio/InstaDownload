@@ -54,6 +54,12 @@
             </intent-filter>
 
         </activity>
+
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.InstaDownload"
+            android:label="Instagram login" />
     </application>
 
 </manifest>

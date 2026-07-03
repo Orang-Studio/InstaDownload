@@ -26,6 +26,7 @@ lifecycleViewmodelCompose = "2.9.3"
 loggingInterceptor = "4.12.0"
 navigationCompose = "2.9.4"
 okhttp = "4.12.0"
+securityCrypto = "1.1.0-alpha06"
 workRuntimeKtx = "2.9.0"
 
 [libraries]
@@ -66,6 +67,7 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "loggingInterceptor" }
 material3 = { module = "androidx.compose.material3:material3" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
 ui = { module = "androidx.compose.ui:ui" }
 ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
 ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
