@@ -24,25 +24,17 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x InstaDownload/gradlew
 
-      - name: Generate signing keystore
-        run: |
-          keytool -genkeypair -v \
-            -keystore InstaDownload/app/release.jks \
-            -alias instadownload \
-            -keyalg RSA -keysize 2048 \
-            -validity 10000 \
-            -storepass instadownload \
-            -keypass instadownload \
-            -dname "CN=InstaDownload, O=Orang-Studio, C=US"
+      - name: Decode signing keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > InstaDownload/app/release.jks
 
       - name: Build release APK
         working-directory: InstaDownload
         run: |
           ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
-            -Pandroid.injected.signing.store.password=instadownload \
-            -Pandroid.injected.signing.key.alias=instadownload \
-            -Pandroid.injected.signing.key.password=instadownload
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

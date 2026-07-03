@@ -9,12 +9,12 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.vakarux.instadownload"
+        applicationId = "com.oranges.instadownload"
         minSdk = 24  // Android 7.0 (Nougat)
         //noinspection OldTargetApi
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.2.1"
+        versionCode = 8
+        versionName = "2.3.1-stories"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

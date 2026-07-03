@@ -55,9 +55,9 @@ object InstagramDownloader {
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaItems(postUrl: String): List<MediaResult> {
+    fun getMediaItems(postUrl: String, sessionId: String? = null): List<MediaResult> {
         extractStory(postUrl)?.let { story ->
-            return tryPublicStory(story)
+            return tryPublicStory(story, sessionId)
         }
 
         val shortcode = extractShortcode(postUrl)
@@ -89,21 +89,21 @@ object InstagramDownloader {
     // Public profile metadata is available anonymously, but normal story media
     // is only usable here if Instagram returns it from the public reels endpoint.
     // Current logged-out responses for normal user stories are usually empty.
-    private fun tryPublicStory(story: StoryRequest): List<MediaResult> {
-        val userId = fetchPublicUserId(story.username)
-        val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username)
+    private fun tryPublicStory(story: StoryRequest, sessionId: String? = null): List<MediaResult> {
+        val userId = fetchPublicUserId(story.username, sessionId)
+        val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username, sessionId)
         val items = extractStoryMedia(reelsJson, userId, story.mediaId)
         if (items.isNotEmpty()) return items
 
         val reelCount = JSONObject(reelsJson).optJSONObject("reels")?.length() ?: 0
         throw UnsupportedOperationException(
-            "Instagram did not expose this story through public anonymous endpoints. " +
+            "Instagram did not expose this story. " +
                     "Resolved @${story.username} to user id $userId, but reels_media returned " +
-                    "$reelCount reel(s). Normal stories require a logged-in session or may have expired."
+                    "$reelCount reel(s). Log in from the app for stories, or the story may have expired."
         )
     }
 
-    private fun fetchPublicUserId(username: String): String {
+    private fun fetchPublicUserId(username: String, sessionId: String? = null): String {
         val encodedUsername = URLEncoder.encode(username, "UTF-8")
         val response = client.newCall(
             Request.Builder()
@@ -115,6 +115,7 @@ object InstagramDownloader {
                 .header("X-IG-App-ID", "936619743392459")
                 .header("X-ASBD-ID", "129477")
                 .header("X-Requested-With", "XMLHttpRequest")
+                .apply { sessionId?.let { header("Cookie", "sessionid=$it") } }
                 .get().build()
         ).execute()
 
@@ -137,7 +138,7 @@ object InstagramDownloader {
             ?: throw Exception("Profile response did not include user id")
     }
 
-    private fun fetchPublicReelsMedia(userId: String, mediaId: String, username: String): String {
+    private fun fetchPublicReelsMedia(userId: String, mediaId: String, username: String, sessionId: String? = null): String {
         val response = client.newCall(
             Request.Builder()
                 .url("https://www.instagram.com/api/v1/feed/reels_media/?reel_ids=$userId&media_id=$mediaId")
@@ -148,6 +149,7 @@ object InstagramDownloader {
                 .header("X-IG-App-ID", "936619743392459")
                 .header("X-ASBD-ID", "129477")
                 .header("X-Requested-With", "XMLHttpRequest")
+                .apply { sessionId?.let { header("Cookie", "sessionid=$it") } }
                 .get().build()
         ).execute()
 

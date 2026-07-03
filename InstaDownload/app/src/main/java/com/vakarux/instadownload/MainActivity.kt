@@ -161,7 +161,7 @@ class MainActivity : ComponentActivity() {
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(trimmed)
+                    InstagramDownloader.getMediaItems(trimmed, sessionStore.sessionId)
                 }
             }
             isLoading = false
@@ -321,32 +321,32 @@ class MainActivity : ComponentActivity() {
                             enter = fadeIn(tween(200)),
                             exit = fadeOut(tween(200))
                         ) {
-                            Column(modifier = Modifier.padding(bottom = 20.dp)) {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = IgOrange.copy(alpha = 0.15f)
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 20.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = IgOrange.copy(alpha = 0.15f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        "Stories require a login",
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            color = IgOrange,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     )
-                                ) {
-                                    Column(modifier = Modifier.padding(16.dp)) {
-                                        Text(
-                                            "Stories require a login",
-                                            style = MaterialTheme.typography.labelLarge.copy(
-                                                color = IgOrange,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        )
-                                        Text(
-                                            "Only logged-in accounts can see Stories on Instagram. " +
-                                                "You sign in here in the app, so your details never leave " +
-                                                "your device. Reels and posts download as usual, no login.",
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                color = colorScheme.onSurfaceVariant
-                                            ),
-                                            modifier = Modifier.padding(top = 4.dp)
-                                        )
-                                    }
+                                    Text(
+                                        "Only logged-in accounts can see Stories on Instagram. " +
+                                            "You sign in here in the app, so your details never leave " +
+                                            "your device. Reels and posts download as usual, no login.",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            color = colorScheme.onSurfaceVariant
+                                        ),
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
                                 }
                             }
                         }
@@ -385,8 +385,8 @@ class MainActivity : ComponentActivity() {
                                 val trimmed = url.trim()
                                 when {
                                     trimmed.isBlank() -> urlError = "Please enter a URL"
-                                    !isValidInstagramUrl(trimmed) ->
-                                        urlError = "Not a valid Instagram post or reel URL"
+                                    !isValidInstagramUrl(trimmed) && !isStoryUrl(trimmed) ->
+                                        urlError = "Not a valid Instagram post, reel, or story URL"
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
                                     else -> coroutineScope.launch {
@@ -395,7 +395,7 @@ class MainActivity : ComponentActivity() {
                                             isLoading = true
                                             val fetched = runCatching {
                                                 withContext(Dispatchers.IO) {
-                                                    InstagramDownloader.getMediaItems(trimmed)
+                                                    InstagramDownloader.getMediaItems(trimmed, sessionStore.sessionId)
                                                 }
                                             }
                                             isLoading = false
@@ -770,8 +770,8 @@ class MainActivity : ComponentActivity() {
 
     private fun isValidInstagramUrl(url: String): Boolean =
         Pattern.compile(
-            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+/?.*"
-        ).matcher(url).matches()
+            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+"
+        ).matcher(url).find()
 
     private fun isStoryUrl(url: String): Boolean =
         Pattern.compile(
