@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
+data class IgSession(val sessionId: String, val csrfToken: String?, val userId: String?)
+
 class SessionStore(context: Context) {
 
     private val prefs: SharedPreferences by lazy {
@@ -31,6 +33,9 @@ class SessionStore(context: Context) {
 
     val isLoggedIn: Boolean
         get() = !sessionId.isNullOrEmpty()
+
+    val session: IgSession?
+        get() = sessionId?.takeIf { it.isNotEmpty() }?.let { IgSession(it, csrfToken, userId) }
 
     fun save(sessionId: String, csrfToken: String?, userId: String?) {
         prefs.edit()

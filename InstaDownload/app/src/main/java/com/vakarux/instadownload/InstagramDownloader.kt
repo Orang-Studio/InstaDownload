@@ -55,9 +55,9 @@ object InstagramDownloader {
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaItems(postUrl: String, sessionId: String? = null): List<MediaResult> {
+    fun getMediaItems(postUrl: String, session: IgSession? = null): List<MediaResult> {
         extractStory(postUrl)?.let { story ->
-            return tryPublicStory(story, sessionId)
+            return tryPublicStory(story, session)
         }
 
         val shortcode = extractShortcode(postUrl)
@@ -89,21 +89,30 @@ object InstagramDownloader {
     // Public profile metadata is available anonymously, but normal story media
     // is only usable here if Instagram returns it from the public reels endpoint.
     // Current logged-out responses for normal user stories are usually empty.
-    private fun tryPublicStory(story: StoryRequest, sessionId: String? = null): List<MediaResult> {
-        val userId = fetchPublicUserId(story.username, sessionId)
-        val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username, sessionId)
+    private fun tryPublicStory(story: StoryRequest, session: IgSession? = null): List<MediaResult> {
+        val userId = fetchPublicUserId(story.username, session)
+        val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username, session)
         val items = extractStoryMedia(reelsJson, userId, story.mediaId)
         if (items.isNotEmpty()) return items
 
         val reelCount = JSONObject(reelsJson).optJSONObject("reels")?.length() ?: 0
+        val hint = if (session == null) "Log in from the app for stories, or the story may have expired."
+            else "The story may have expired, or the account restricts story views."
         throw UnsupportedOperationException(
             "Instagram did not expose this story. " +
                     "Resolved @${story.username} to user id $userId, but reels_media returned " +
-                    "$reelCount reel(s). Log in from the app for stories, or the story may have expired."
+                    "$reelCount reel(s). $hint"
         )
     }
 
-    private fun fetchPublicUserId(username: String, sessionId: String? = null): String {
+    private fun sessionCookieHeader(session: IgSession): String {
+        val parts = mutableListOf("sessionid=${session.sessionId}")
+        session.csrfToken?.let { parts += "csrftoken=$it" }
+        session.userId?.let { parts += "ds_user_id=$it" }
+        return parts.joinToString("; ")
+    }
+
+    private fun fetchPublicUserId(username: String, session: IgSession? = null): String {
         val encodedUsername = URLEncoder.encode(username, "UTF-8")
         val response = client.newCall(
             Request.Builder()
@@ -115,7 +124,12 @@ object InstagramDownloader {
                 .header("X-IG-App-ID", "936619743392459")
                 .header("X-ASBD-ID", "129477")
                 .header("X-Requested-With", "XMLHttpRequest")
-                .apply { sessionId?.let { header("Cookie", "sessionid=$it") } }
+                .apply {
+                    session?.let {
+                        header("Cookie", sessionCookieHeader(it))
+                        it.csrfToken?.let { csrf -> header("X-CSRFToken", csrf) }
+                    }
+                }
                 .get().build()
         ).execute()
 
@@ -138,10 +152,10 @@ object InstagramDownloader {
             ?: throw Exception("Profile response did not include user id")
     }
 
-    private fun fetchPublicReelsMedia(userId: String, mediaId: String, username: String, sessionId: String? = null): String {
+    private fun fetchPublicReelsMedia(userId: String, mediaId: String, username: String, session: IgSession? = null): String {
         val response = client.newCall(
             Request.Builder()
-                .url("https://www.instagram.com/api/v1/feed/reels_media/?reel_ids=$userId&media_id=$mediaId")
+                .url("https://www.instagram.com/api/v1/feed/reels_media/?reel_ids=$userId")
                 .header("User-Agent", DESKTOP_UA)
                 .header("Accept", "*/*")
                 .header("Accept-Language", "en-US,en;q=0.9")
@@ -149,7 +163,12 @@ object InstagramDownloader {
                 .header("X-IG-App-ID", "936619743392459")
                 .header("X-ASBD-ID", "129477")
                 .header("X-Requested-With", "XMLHttpRequest")
-                .apply { sessionId?.let { header("Cookie", "sessionid=$it") } }
+                .apply {
+                    session?.let {
+                        header("Cookie", sessionCookieHeader(it))
+                        it.csrfToken?.let { csrf -> header("X-CSRFToken", csrf) }
+                    }
+                }
                 .get().build()
         ).execute()
 

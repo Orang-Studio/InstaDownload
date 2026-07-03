@@ -161,7 +161,7 @@ class MainActivity : ComponentActivity() {
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(trimmed, sessionStore.sessionId)
+                    InstagramDownloader.getMediaItems(trimmed, sessionStore.session)
                 }
             }
             isLoading = false
@@ -395,7 +395,7 @@ class MainActivity : ComponentActivity() {
                                             isLoading = true
                                             val fetched = runCatching {
                                                 withContext(Dispatchers.IO) {
-                                                    InstagramDownloader.getMediaItems(trimmed, sessionStore.sessionId)
+                                                    InstagramDownloader.getMediaItems(trimmed, sessionStore.session)
                                                 }
                                             }
                                             isLoading = false
