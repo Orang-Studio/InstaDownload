@@ -526,8 +526,8 @@ class MainActivity : ComponentActivity() {
 
     private fun isValidInstagramUrl(url: String): Boolean =
         Pattern.compile(
-            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+/?.*"
-        ).matcher(url).matches()
+            "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+"
+        ).matcher(url).find()
 
     private fun checkPermissions(): Boolean =
         ContextCompat.checkSelfPermission(
