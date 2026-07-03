@@ -20,7 +20,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +33,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -100,14 +108,18 @@ class MainActivity : ComponentActivity() {
     fun InstagramDownloaderScreen(initialUrl: String = "") {
         var url by remember { mutableStateOf(initialUrl) }
         var isLoading by remember { mutableStateOf(false) }
+        var isSaving by remember { mutableStateOf(false) }
         var urlError by remember { mutableStateOf<String?>(null) }
         var fullError by remember { mutableStateOf<String?>(null) }
-        var downloadStarted by remember { mutableStateOf(false) }
+        var media by remember { mutableStateOf<List<MediaResult>?>(null) }
         var downloadComplete by remember { mutableStateOf(false) }
 
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
         val colorScheme = MaterialTheme.colorScheme
+        val uriHandler = LocalUriHandler.current
+
+        val isStory = isStoryUrl(url.trim())
 
         val igGradient = Brush.verticalGradient(
             colors = if (isSystemInDarkMode()) {
@@ -116,6 +128,32 @@ class MainActivity : ComponentActivity() {
                 listOf(IgPurple, IgPink, IgOrange)
             }
         )
+
+        LaunchedEffect(url) {
+            val trimmed = url.trim()
+            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed)) {
+                media = null
+                return@LaunchedEffect
+            }
+            delay(350)
+            isLoading = true
+            urlError = null
+            fullError = null
+            media = null
+            downloadComplete = false
+            val items = runCatching {
+                withContext(Dispatchers.IO) {
+                    InstagramDownloader.getMediaItems(trimmed)
+                }
+            }
+            isLoading = false
+            if (items.isFailure) {
+                fullError = items.exceptionOrNull()?.message ?: "Something went wrong"
+                return@LaunchedEffect
+            }
+            hapticStart(context)
+            media = items.getOrThrow()
+        }
 
         Scaffold(
             containerColor = Color.Transparent,
@@ -206,9 +244,11 @@ class MainActivity : ComponentActivity() {
                             onValueChange = {
                                 url = it
                                 if (urlError != null) urlError = null
+                                media = null
+                                fullError = null
                             },
                             label = { Text("Instagram URL") },
-                            placeholder = { Text("https://www.instagram.com/reel/…") },
+                            placeholder = { Text("https://www.instagram.com/reel/...") },
                             isError = urlError != null,
                             supportingText = {
                                 if (urlError != null) {
@@ -229,6 +269,8 @@ class MainActivity : ComponentActivity() {
                                         if (pasted.isNotEmpty()) {
                                             url = pasted
                                             urlError = null
+                                            media = null
+                                            fullError = null
                                         }
                                     },
                                     modifier = Modifier.semantics {
@@ -242,12 +284,10 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 20.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             singleLine = false,
                             maxLines = 3,
-                            enabled = !isLoading,
+                            enabled = !isSaving,
                             shape = RoundedCornerShape(16.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = IgPink,
@@ -256,47 +296,83 @@ class MainActivity : ComponentActivity() {
                             )
                         )
 
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        AnimatedVisibility(
+                            visible = isStory,
+                            enter = fadeIn(tween(200)),
+                            exit = fadeOut(tween(200))
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 20.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = IgOrange.copy(alpha = 0.15f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        "Stories aren't supported",
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            color = IgOrange,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                    Text(
+                                        "Instagram only serves Stories to logged-in accounts, so they " +
+                                            "can't be downloaded here. Reels and posts work as usual.",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            color = colorScheme.onSurfaceVariant
+                                        ),
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+
                         Button(
                             onClick = {
+                                val trimmed = url.trim()
                                 when {
-                                    url.isBlank() -> urlError = "Please enter a URL"
-                                    !isValidInstagramUrl(url.trim()) ->
+                                    trimmed.isBlank() -> urlError = "Please enter a URL"
+                                    !isValidInstagramUrl(trimmed) ->
                                         urlError = "Not a valid Instagram post or reel URL"
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-                                            && !checkPermissions() -> {
-                                        requestPermissions()
-                                    }
+                                            && !checkPermissions() -> requestPermissions()
                                     else -> coroutineScope.launch {
-                                        isLoading = true
-                                        urlError = null
                                         fullError = null
-                                        downloadStarted = false
-                                        downloadComplete = false
-                                        val items = runCatching {
-                                            withContext(Dispatchers.IO) {
-                                                InstagramDownloader.getMediaItems(url.trim())
+                                        val items = media ?: run {
+                                            isLoading = true
+                                            val fetched = runCatching {
+                                                withContext(Dispatchers.IO) {
+                                                    InstagramDownloader.getMediaItems(trimmed)
+                                                }
                                             }
-                                        }
-                                        isLoading = false
-                                        if (items.isFailure) {
-                                            fullError = items.exceptionOrNull()?.message ?: "Something went wrong"
-                                            return@launch
+                                            isLoading = false
+                                            if (fetched.isFailure) {
+                                                fullError = fetched.exceptionOrNull()?.message ?: "Something went wrong"
+                                                return@launch
+                                            }
+                                            fetched.getOrThrow().also { media = it }
                                         }
                                         hapticStart(context)
-                                        downloadStarted = true
+                                        isSaving = true
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
-                                                items.getOrThrow().forEachIndexed { i, item ->
+                                                items.forEachIndexed { i, item ->
                                                     saveToDownloads(item.url, item.isVideo, i, context)
                                                 }
                                             }
                                         }
-                                        downloadStarted = false
+                                        isSaving = false
                                         if (dlResult.isSuccess) {
                                             hapticComplete(context)
                                             downloadComplete = true
                                             delay(2500)
                                             downloadComplete = false
+                                            media = null
                                         } else {
                                             fullError = dlResult.exceptionOrNull()?.message ?: "Download failed"
                                         }
@@ -306,7 +382,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp),
-                            enabled = !isLoading,
+                            enabled = !isSaving && !isStory,
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = IgPink,
@@ -319,36 +395,90 @@ class MainActivity : ComponentActivity() {
                                 pressedElevation = 2.dp
                             )
                         ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.5.dp
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    "Fetching…",
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Filled.Download,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "Download",
-                                    style = MaterialTheme.typography.labelLarge.copy(
-                                        fontWeight = FontWeight.Bold
+                            when {
+                                isSaving -> {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.5.dp
                                     )
-                                )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        "Saving…",
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                                downloadComplete -> {
+                                    Icon(
+                                        imageVector = Icons.Filled.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Saved!",
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
+                                else -> {
+                                    Icon(
+                                        imageVector = Icons.Filled.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Download",
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // ── Preview (inline) ──────────────────────────────
+                AnimatedVisibility(
+                    visible = media != null,
+                    enter = fadeIn(tween(200)),
+                    exit = fadeOut(tween(200))
+                ) {
+                    val items = media ?: emptyList()
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = colorScheme.surface
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                if (items.size > 1) "${items.size} items" else "Preview",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = colorScheme.onSurface
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items.forEach { item -> MediaThumbnail(item) }
+                            }
+                        }
+                    }
+                }
 
                 // ── Error card (copyable) ─────────────────────────
                 AnimatedVisibility(
@@ -408,43 +538,43 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.padding(top = 4.dp)
                                 )
                             }
-                        }
-                    }
-                }
 
-                // ── Success card ──────────────────────────────────
-                AnimatedVisibility(
-                    visible = downloadStarted,
-                    enter = fadeIn(tween(200)),
-                    exit = fadeOut(tween(200))
-                ) {
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Download,
-                                contentDescription = null,
-                                tint = colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
+
                             Text(
-                                if (downloadComplete) "Download complete!" else "Downloading to Downloads folder…",
+                                "Instagram may have changed — updating to the latest version usually fixes this.",
                                 style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = colorScheme.onSecondaryContainer,
+                                    color = colorScheme.onErrorContainer,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Button(
+                                onClick = {
+                                    uriHandler.openUri("https://github.com/Orang-Studio/InstaDownload/releases/latest")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colorScheme.error,
+                                    contentColor = colorScheme.onError
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Update to latest release",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -495,6 +625,72 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    private fun MediaThumbnail(item: MediaResult) {
+        val previewUrl = item.previewUrl
+        var loadFailed by remember(previewUrl) { mutableStateOf(false) }
+        val bitmap by produceState<ImageBitmap?>(initialValue = null, previewUrl) {
+            if (previewUrl == null) {
+                value = null
+                return@produceState
+            }
+            val bmp = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = InstagramDownloader.fetchBytes(previewUrl)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                }.getOrNull()
+            }
+            if (bmp == null) loadFailed = true
+            value = bmp
+        }
+
+        Box(
+            modifier = Modifier
+                .size(width = 120.dp, height = 150.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            val bmp = bitmap
+            when {
+                bmp != null -> Image(
+                    bitmap = bmp,
+                    contentDescription = if (item.isVideo) "Video preview" else "Image preview",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                previewUrl == null || loadFailed -> Icon(
+                    imageVector = if (item.isVideo) Icons.Filled.Movie else Icons.Filled.Image,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(36.dp)
+                )
+                else -> CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            if (item.isVideo && bmp != null) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+    }
+
     // ── Download logic ─────────────────────────────────────────────
 
     private fun saveToDownloads(mediaUrl: String, isVideo: Boolean, index: Int, context: Context) {
@@ -528,6 +724,11 @@ class MainActivity : ComponentActivity() {
         Pattern.compile(
             "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+"
         ).matcher(url).find()
+
+    private fun isStoryUrl(url: String): Boolean =
+        Pattern.compile(
+            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+/?.*"
+        ).matcher(url).matches()
 
     private fun checkPermissions(): Boolean =
         ContextCompat.checkSelfPermission(
