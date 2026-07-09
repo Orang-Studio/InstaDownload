@@ -5,9 +5,9 @@ An Android only app for downloading Instagram videos directly to your phone.
 <p align="center">
 <a href="https://www.star-history.com/?repos=Orang-Studio%2FInstaDownload&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&theme=dark&legend=top-left&sealed_token=ApJfhQSJSz7OannaAqWWw_q4057MEHaP5qqe8fDGnAh5ID93oFjg5D8iTD-Fui6du1-O47a2RwDWtY5bvjHPGT7YyC2clWpkQ56LV1D_n-w3LtkkDa3wCA" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left&sealed_token=ApJfhQSJSz7OannaAqWWw_q4057MEHaP5qqe8fDGnAh5ID93oFjg5D8iTD-Fui6du1-O47a2RwDWtY5bvjHPGT7YyC2clWpkQ56LV1D_n-w3LtkkDa3wCA" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left&sealed_token=ApJfhQSJSz7OannaAqWWw_q4057MEHaP5qqe8fDGnAh5ID93oFjg5D8iTD-Fui6du1-O47a2RwDWtY5bvjHPGT7YyC2clWpkQ56LV1D_n-w3LtkkDa3wCA" />
  </picture>
 </a>
 </p>
