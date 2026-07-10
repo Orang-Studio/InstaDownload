@@ -7,6 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.FormBody
 import org.json.JSONObject
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
@@ -222,7 +223,20 @@ object InstagramDownloader {
 
         // Instagram now double-encodes JSON inside the embed page:
         // keys/values are delimited by \" and path separators are \\\/
-        fun String.unescape() = replace("\\\\\\/", "/").replace("\\u0026", "&")
+        fun String.unescape() = replace("\\\\\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#039;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .let { s ->
+                // Only run URLDecoder.decode if contains %XX pattern
+                // safeguard against stray non-escape '%' url patterns
+                if (s.contains(Regex("%[0-9A-Fa-f]{2}")))
+                    runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
+                else s
+            }
 
         // Single video
         Regex("""\\"video_url\\":\\"(https:(?:(?!\\").)*)""").find(html)?.let {
@@ -232,12 +246,20 @@ object InstagramDownloader {
         }
 
         // Single image or carousel (collect all unique display_url entries)
-        val images = Regex("""\\"display_url\\":\\"(https:(?:(?!\\").)*)""")
+        val imagesFromDisplayUrlJson = Regex("""\\"display_url\\":\\"(https:(?:(?!\\").)*)""")
             .findAll(html)
             .map { MediaResult(it.groupValues[1].unescape(), isVideo = false) }
             .distinctBy { it.url }
             .toList()
-        if (images.isNotEmpty()) return images
+        if (imagesFromDisplayUrlJson.isNotEmpty()) return imagesFromDisplayUrlJson
+
+        // Fallback: image tag with EmbeddedMediaImage class
+        val imagesFromImgEmbeddedMediaImageClass = Regex("""<img[^>]*class="EmbeddedMediaImage"[^>]*src="(https:[^"]*)"""")
+            .findAll(html)
+            .map { MediaResult(it.groupValues[1].unescape(), isVideo = false) }
+            .distinctBy { it.url }
+            .toList()
+        if (imagesFromImgEmbeddedMediaImageClass.isNotEmpty()) return imagesFromImgEmbeddedMediaImageClass
 
         // Fallback: OG image tag (plain HTML attribute, no double-encoding)
         Regex("""<meta property="og:image" content="([^"]+)"""").find(html)?.let {
