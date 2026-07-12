@@ -266,6 +266,10 @@ object InstagramDownloader {
             return listOf(MediaResult(it.groupValues[1].unescape(), isVideo = true, thumbnailUrl = poster))
         }
 
+        if (Regex("""\\"is_video\\":true""").containsMatchIn(html)) {
+            throw Exception("Embed HTTP ${response.code}: is_video=true but video_url missing from embed response")
+        }
+
         // Single image or carousel (collect all unique display_url entries)
         val imagesFromDisplayUrlJson = Regex("""\\"display_url\\":\\"(https:(?:(?!\\").)*)""")
             .findAll(html)
