@@ -5,7 +5,6 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.FormBody
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -23,7 +22,7 @@ data class MediaResult(
 object InstagramDownloader {
 
     private val SHORTCODE_REGEX = Pattern.compile(
-        "(?:instagram\\.com|instagr\\.am)/(?:reel|p|tv)/([A-Za-z0-9_-]+)"
+        "(?:instagram\\.com|instagr\\.am)/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)"
     )
     private val STORY_REGEX = Pattern.compile(
         "(?:instagram\\.com|instagr\\.am)/stories/([A-Za-z0-9._]+)/([0-9]+)"
@@ -71,17 +70,10 @@ object InstagramDownloader {
             embedError = e.message ?: e.javaClass.simpleName
         }
 
-        val graphqlError: String
-        try {
-            return tryGraphQL(shortcode)
-        } catch (e: Exception) {
-            graphqlError = e.message ?: e.javaClass.simpleName
-        }
-
         throw Exception(
-            "Latest methods are patched, please open an issue\n\n" +
-            "Embed: $embedError\n" +
-            "GraphQL: $graphqlError"
+            "Could not fetch this post. It may be private, age-restricted, or deleted. " +
+            "This build only downloads public content — use the login build for private posts and stories.\n\n" +
+            "Embed: $embedError"
         )
     }
 
@@ -273,103 +265,6 @@ object InstagramDownloader {
         throw Exception("Embed HTTP ${response.code}: no media URL found (${html.length} chars)")
     }
 
-    // ── Strategy 2: GraphQL with session cookies ────────────────────────────
-    // Requires:
-    //   1. csrftoken cookie from homepage visit
-    //   2. X-CSRFToken header matching that cookie
-    //   3. X-IG-App-ID header
-    // IMPORTANT: Do NOT visit the reel page before this call — doing so causes
-    // Instagram to return an HTML soft-gate instead of JSON for subsequent
-    // GraphQL requests on the same session.
-    private fun tryGraphQL(shortcode: String): List<MediaResult> {
-        // Step 1: warm up session — get csrftoken cookie
-        client.newCall(
-            Request.Builder()
-                .url("https://www.instagram.com/")
-                .header("User-Agent", DESKTOP_UA)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .get().build()
-        ).execute().close()
-
-        val csrfToken = cookieStore["www.instagram.com"]
-            ?.firstOrNull { it.name == "csrftoken" }?.value ?: ""
-
-        // Step 2: POST to graphql — cookies are forwarded automatically by cookieJar
-        val body = FormBody.Builder()
-            .add("variables", """{"shortcode":"$shortcode"}""")
-            .add("doc_id", "8845758582119845")
-            .build()
-
-        val resp = client.newCall(
-            Request.Builder()
-                .url("https://www.instagram.com/graphql/query")
-                .post(body)
-                .header("User-Agent", DESKTOP_UA)
-                .header("Accept", "*/*")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Referer", "https://www.instagram.com/")
-                .header("X-IG-App-ID", "936619743392459")
-                .header("X-CSRFToken", csrfToken)
-                .build()
-        ).execute()
-
-        val respBody = resp.body?.string()
-            ?: throw Exception("GraphQL HTTP ${resp.code}: empty body")
-
-        // Detect HTML before attempting JSON parse (indicates login gate or CSRF failure)
-        if (respBody.trimStart().startsWith('<'))
-            throw Exception("GraphQL HTTP ${resp.code}: got HTML instead of JSON — csrf=${csrfToken.take(8)}, preview=${respBody.take(80)}")
-
-        if (!resp.isSuccessful)
-            throw Exception("GraphQL HTTP ${resp.code}: ${respBody.take(200)}")
-
-        val json = try {
-            JSONObject(respBody)
-        } catch (e: Exception) {
-            throw Exception("GraphQL HTTP ${resp.code}: JSON parse failed — ${respBody.take(150)}")
-        }
-        // Surface API-level errors (e.g. stale doc_id returns data:null + errors array)
-        if (json.isNull("data")) {
-            val apiErr = json.optJSONArray("errors")
-                ?.optJSONObject(0)?.optString("message", "unknown") ?: "data is null"
-            throw Exception("GraphQL HTTP ${resp.code}: API error ($apiErr) — ${respBody.take(150)}")
-        }
-        val media = json.getJSONObject("data")
-            .optJSONObject("xdt_shortcode_media")
-            ?: throw Exception("GraphQL HTTP ${resp.code}: xdt_shortcode_media=null — ${respBody.take(150)}")
-
-        // Carousel / sidecar post — return all slides
-        val edges = media.optJSONObject("edge_sidecar_to_children")
-            ?.optJSONArray("edges")
-        if (edges != null && edges.length() > 0) {
-            val items = mutableListOf<MediaResult>()
-            for (i in 0 until edges.length()) {
-                val node = edges.getJSONObject(i).getJSONObject("node")
-                val poster = node.optString("display_url").takeIf { it.isNotEmpty() }
-                if (node.optBoolean("is_video", false)) {
-                    val url = node.optString("video_url").takeIf { it.isNotEmpty() } ?: continue
-                    items += MediaResult(url, isVideo = true, thumbnailUrl = poster)
-                } else {
-                    val url = poster ?: continue
-                    items += MediaResult(url, isVideo = false, thumbnailUrl = url)
-                }
-            }
-            if (items.isNotEmpty()) return items
-        }
-
-        // Single photo or video
-        val poster = media.optString("display_url").takeIf { it.isNotEmpty() }
-        return if (media.optBoolean("is_video", false)) {
-            val url = media.optString("video_url").takeIf { it.isNotEmpty() }
-                ?: throw Exception("GraphQL: is_video=true but video_url empty")
-            listOf(MediaResult(url, isVideo = true, thumbnailUrl = poster))
-        } else {
-            val url = poster ?: throw Exception("GraphQL: display_url empty")
-            listOf(MediaResult(url, isVideo = false, thumbnailUrl = url))
-        }
-    }
-
     private fun mediaRequest(url: String) = Request.Builder()
         .url(url)
         .header("User-Agent", MOBILE_UA)
@@ -391,7 +286,7 @@ object InstagramDownloader {
 
     private fun extractShortcode(url: String): String? {
         val m = SHORTCODE_REGEX.matcher(url)
-        return if (m.find()) m.group(1) else null
+        return if (m.find()) m.group(1)!!.take(11) else null
     }
 
     private fun extractStory(url: String): StoryRequest? {
