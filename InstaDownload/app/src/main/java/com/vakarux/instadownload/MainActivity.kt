@@ -644,32 +644,48 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun GitHubCredit() {
         val uriHandler = LocalUriHandler.current
+        val context = LocalContext.current
+        val version = remember {
+            runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }.getOrNull()
+        }
 
-        TextButton(
-            onClick = { uriHandler.openUri("https://github.com/Orang-Studio/InstaDownload") },
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.github),
-                    contentDescription = "GitHub",
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            version?.let {
+                Text(
+                    "v$it",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                "Made by Vakarux",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    color = Color.White.copy(alpha = 0.85f)
+            TextButton(
+                onClick = { uriHandler.openUri("https://github.com/Orang-Studio/InstaDownload") },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.github),
+                        contentDescription = "GitHub",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Made by Vakarux",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
                 )
-            )
+            }
         }
     }
 

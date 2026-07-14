@@ -13,8 +13,8 @@ android {
         minSdk = 24  // Android 7.0 (Nougat)
         //noinspection OldTargetApi
         targetSdk = 35
-        versionCode = 8
-        versionName = "2.3.1-stories"
+        versionCode = 9
+        versionName = "2.3.4-stories"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
