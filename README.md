@@ -1,13 +1,16 @@
 # InstaDownload
+[<img src="img/badge_fdroid.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/com.vakarux.instadownload)
+[<img src="img/badge_github.png" alt="Get it on GitHub" height="80">](https://github.com/Orang-Studio/InstaDownload/releases)
+
 
 An Android only app for downloading Instagram videos directly to your phone.  
 
 <p align="center">
-<a href="https://www.star-history.com/?repos=Orang-Studio%2FInstaDownload&type=date&legend=top-left">
+<a href="https://www.star-history.com/">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&theme=dark&legend=top-left&sealed_token=ApJfhQSJSz7OannaAqWWw_q4057MEHaP5qqe8fDGnAh5ID93oFjg5D8iTD-Fui6du1-O47a2RwDWtY5bvjHPGT7YyC2clWpkQ56LV1D_n-w3LtkkDa3wCA" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left&sealed_token=ApJfhQSJSz7OannaAqWWw_q4057MEHaP5qqe8fDGnAh5ID93oFjg5D8iTD-Fui6du1-O47a2RwDWtY5bvjHPGT7YyC2clWpkQ56LV1D_n-w3LtkkDa3wCA" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left&sealed_token=ApJfhQSJSz7OannaAqWWw_q4057MEHaP5qqe8fDGnAh5ID93oFjg5D8iTD-Fui6du1-O47a2RwDWtY5bvjHPGT7YyC2clWpkQ56LV1D_n-w3LtkkDa3wCA" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=orang-studio/instadownload&type=date&theme=dark&legend=top-left&sealed_token=815h0tPGpqxLdZpnSLN9X52UyRupgo8jCoZ1bKXt_GpEaLV_Cg-4dZh3T3JGYXq5eGNnu7luLXd6S1wPiVw5PRR0IJFwFy3e2T8nyMC-oE0QqNSTloHHeA" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=orang-studio/instadownload&type=date&legend=top-left&sealed_token=815h0tPGpqxLdZpnSLN9X52UyRupgo8jCoZ1bKXt_GpEaLV_Cg-4dZh3T3JGYXq5eGNnu7luLXd6S1wPiVw5PRR0IJFwFy3e2T8nyMC-oE0QqNSTloHHeA" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=orang-studio/instadownload&type=date&legend=top-left&sealed_token=815h0tPGpqxLdZpnSLN9X52UyRupgo8jCoZ1bKXt_GpEaLV_Cg-4dZh3T3JGYXq5eGNnu7luLXd6S1wPiVw5PRR0IJFwFy3e2T8nyMC-oE0QqNSTloHHeA" />
  </picture>
 </a>
 </p>
@@ -20,6 +23,7 @@ An Android only app for downloading Instagram videos directly to your phone.
     <img src="https://img.shields.io/github/v/release/Orang-Studio/InstaDownload?label=Download%20app&amp;color=2563eb" alt="Download app" />
   </a>
 </p>
+
 
 ## Features
 -  Paste an Instagram URL and download the video directly.
