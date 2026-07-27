@@ -20,5 +20,16 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
--keep class com.chaquo.python.** { *; }
--keep class com.chaquo.python.android.** { *; }
+-dontwarn okhttp3.internal.platform.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
+
+-keep class com.google.crypto.tink.** { *; }
+-keepclassmembers class * extends com.google.crypto.tink.shaded.protobuf.GeneratedMessageLite {
+    <fields>;
+}
+-dontwarn com.google.crypto.tink.**
+
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

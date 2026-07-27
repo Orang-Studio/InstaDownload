@@ -29,14 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.PlayArrow
+import com.vakarux.instadownload.ui.AppIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -217,7 +210,7 @@ class MainActivity : ComponentActivity() {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Download,
+                        imageVector = AppIcons.Download,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(44.dp)
@@ -296,7 +289,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.ContentPaste,
+                                        imageVector = AppIcons.ContentPaste,
                                         contentDescription = null,
                                         tint = colorScheme.primary
                                     )
@@ -368,7 +361,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Login,
+                                    imageVector = AppIcons.Login,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -458,7 +451,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 downloadComplete -> {
                                     Icon(
-                                        imageVector = Icons.Filled.Download,
+                                        imageVector = AppIcons.Download,
                                         contentDescription = null,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -472,7 +465,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 else -> {
                                     Icon(
-                                        imageVector = Icons.Filled.Download,
+                                        imageVector = AppIcons.Download,
                                         contentDescription = null,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -561,7 +554,7 @@ class MainActivity : ComponentActivity() {
                                         clipboard.setPrimaryClip(clip)
                                     }) {
                                         Icon(
-                                            imageVector = Icons.Filled.ContentCopy,
+                                            imageVector = AppIcons.ContentCopy,
                                             contentDescription = "Copy error",
                                             tint = colorScheme.onErrorContainer,
                                             modifier = Modifier.size(18.dp)
@@ -611,7 +604,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Download,
+                                    imageVector = AppIcons.Download,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -724,7 +717,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize()
                 )
                 previewUrl == null || loadFailed -> Icon(
-                    imageVector = if (item.isVideo) Icons.Filled.Movie else Icons.Filled.Image,
+                    imageVector = if (item.isVideo) AppIcons.Movie else AppIcons.Image,
                     contentDescription = null,
                     tint = Color.White.copy(alpha = 0.7f),
                     modifier = Modifier.size(36.dp)
@@ -745,7 +738,7 @@ class MainActivity : ComponentActivity() {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.PlayArrow,
+                        imageVector = AppIcons.PlayArrow,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(24.dp)

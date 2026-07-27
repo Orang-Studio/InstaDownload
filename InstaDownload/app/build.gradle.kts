@@ -13,19 +13,22 @@ android {
         minSdk = 24  // Android 7.0 (Nougat)
         //noinspection OldTargetApi
         targetSdk = 35
-        versionCode = 9
-        versionName = "2.3.4-stories"
+        versionCode = 12
+        versionName = "2.4.0-stories"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        resourceConfigurations += listOf("en")
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -54,6 +57,12 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/*.version"
+            excludes += "/META-INF/**/LICENSE.txt"
+            excludes += "/DebugProbesKt.bin"
+            excludes += "/kotlin-tooling-metadata.json"
+            excludes += "/kotlin/**.kotlin_builtins"
+            excludes += "/META-INF/*.kotlin_module"
         }
     }
     testOptions {
@@ -75,7 +84,6 @@ dependencies {
     implementation(libs.material3)
 
     // Additional Compose libraries for enhanced features
-    implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.animation)
     implementation(libs.androidx.foundation)
 
@@ -85,28 +93,9 @@ dependencies {
 
     implementation(libs.androidx.security.crypto)
 
-    // JSON parsing
-    implementation(libs.gson)
-
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
-
-    // ViewModel and State Management
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-
-    // DataStore for settings persistence (modern SharedPreferences alternative)
-    implementation(libs.androidx.datastore.preferences)
-
-    // Navigation if you plan to add more screens later
-    implementation(libs.androidx.navigation.compose)
-
-    // Splash Screen API for modern splash screens
-    implementation(libs.androidx.core.splashscreen)
-
-    // Work Manager for background tasks (useful for queued downloads)
-    implementation(libs.androidx.work.runtime.ktx)
 
     // Testing dependencies
     //testImplementation(libs.junit)
