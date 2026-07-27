@@ -41,12 +41,18 @@ jobs:
           APK_NAME="InstaDownload-${GITHUB_REF_NAME#v}-main.apk"
           cp InstaDownload/app/build/outputs/apk/release/app-release.apk "$APK_NAME"
           echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          MAPPING=InstaDownload/app/build/outputs/mapping/release/mapping.txt
+          if [ -f "$MAPPING" ]; then
+            cp "$MAPPING" "InstaDownload-${GITHUB_REF_NAME#v}-main-mapping.txt"
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.prepare.outputs.apk_name }}
-          path: ${{ steps.prepare.outputs.apk_name }}
+          path: |
+            ${{ steps.prepare.outputs.apk_name }}
+            InstaDownload-*-main-mapping.txt
           retention-days: 30
 
   build-stories:
@@ -86,12 +92,18 @@ jobs:
           APK_NAME="InstaDownload-${GITHUB_REF_NAME#v}-stories.apk"
           cp InstaDownload/app/build/outputs/apk/release/app-release.apk "$APK_NAME"
           echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          MAPPING=InstaDownload/app/build/outputs/mapping/release/mapping.txt
+          if [ -f "$MAPPING" ]; then
+            cp "$MAPPING" "InstaDownload-${GITHUB_REF_NAME#v}-stories-mapping.txt"
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.prepare.outputs.apk_name }}
-          path: ${{ steps.prepare.outputs.apk_name }}
+          path: |
+            ${{ steps.prepare.outputs.apk_name }}
+            InstaDownload-*-stories-mapping.txt
           retention-days: 30
 
   release:
@@ -110,7 +122,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*.apk
+          files: |
+            artifacts/*.apk
+            artifacts/*-mapping.txt
           name: InstaDownload ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true

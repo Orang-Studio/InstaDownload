@@ -20,5 +20,10 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
--keep class com.chaquo.python.** { *; }
--keep class com.chaquo.python.android.** { *; }
+-dontwarn okhttp3.internal.platform.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
+
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

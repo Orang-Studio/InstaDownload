@@ -1,0 +1,5 @@
+* Massively smaller app: the APK drops from 12.5 MB to under 1 MB
+* Enabled code and resource shrinking for release builds
+* Replaced the bundled Material icon set with only the six icons the app uses
+* Removed unused dependencies (Gson, Navigation, WorkManager, DataStore, Splashscreen)
+* Trimmed bundled translations the app never used
