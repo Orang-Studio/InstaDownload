@@ -25,7 +25,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
     <img src="https://img.shields.io/github/downloads/Orang-Studio/InstaDownload/total.svg?label=Downloads" alt="Total downloads">
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/Orang-Studio/InstaDownload" alt="MIT License">
+    <img src="https://img.shields.io/github/license/Orang-Studio/InstaDownload" alt="GPLv3 License">
   </a>
 </p>
 
@@ -37,7 +37,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 - No ads, analytics, or tracking.
 - No third-party download service.
 - No Instagram login required for public content.
-- Fully open source under the MIT License.
+- Fully open source under the GPLv3 License.
 
 > [!IMPORTANT]
 > The **Stories version** requires you to log in to Instagram. Only download it from the official [InstaDownload releases page](https://github.com/Orang-Studio/InstaDownload/releases).
@@ -138,4 +138,4 @@ For bugs or feature requests, use [GitHub Issues](https://github.com/Orang-Studi
 
 ## License
 
-InstaDownload is available under the [MIT License](LICENSE)
+InstaDownload is available under the [GPLv3 License](LICENSE)
