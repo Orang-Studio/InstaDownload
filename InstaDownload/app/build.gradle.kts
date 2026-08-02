@@ -70,6 +70,17 @@ android {
         unitTests.all { it.enabled = false }   // disable unit tests
     }
 }
+
+tasks.configureEach {
+    if (name == "assembleDebug") {
+        doLast {
+            val outputDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
+            val defaultApk = outputDir.resolve("app-debug.apk")
+            val namedApk = outputDir.resolve("instadownload-debug.apk")
+            if (defaultApk.exists()) defaultApk.copyTo(namedApk, overwrite = true)
+        }
+    }
+}
 dependencies {
     // Core Android libraries
     implementation(libs.androidx.core.ktx.v1120)

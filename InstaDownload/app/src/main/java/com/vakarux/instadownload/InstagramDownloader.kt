@@ -55,26 +55,28 @@ object InstagramDownloader {
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaItems(postUrl: String): List<MediaResult> {
+    fun getMediaItems(
+        postUrl: String,
+        quality: DownloadQuality = DownloadQuality.BEST
+    ): List<MediaResult> {
         extractStory(postUrl)?.let { story ->
-            return tryPublicStory(story)
+            return tryPublicStory(story, quality)
         }
 
         val shortcode = extractShortcode(postUrl)
             ?: throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
 
-        val embedError: String
         try {
             return tryEmbedPage(shortcode)
+        } catch (e: UnsupportedOperationException) {
+            throw e
         } catch (e: Exception) {
-            embedError = e.message ?: e.javaClass.simpleName
+            throw Exception(
+                "Could not fetch this post. It may be private, age-restricted, or deleted. " +
+                "This build only downloads public content — use the login build for private posts and stories.\n\n" +
+                "Embed: ${e.message ?: e.javaClass.simpleName}"
+            )
         }
-
-        throw Exception(
-            "Could not fetch this post. It may be private, age-restricted, or deleted. " +
-            "This build only downloads public content — use the login build for private posts and stories.\n\n" +
-            "Embed: $embedError"
-        )
     }
 
     // ── Public story probe ─────────────────────────────────────────────────
@@ -82,10 +84,10 @@ object InstagramDownloader {
     // Public profile metadata is available anonymously, but normal story media
     // is only usable here if Instagram returns it from the public reels endpoint.
     // Current logged-out responses for normal user stories are usually empty.
-    private fun tryPublicStory(story: StoryRequest): List<MediaResult> {
+    private fun tryPublicStory(story: StoryRequest, quality: DownloadQuality): List<MediaResult> {
         val userId = fetchPublicUserId(story.username)
         val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username)
-        val items = extractStoryMedia(reelsJson, userId, story.mediaId)
+        val items = extractStoryMedia(reelsJson, userId, story.mediaId, quality)
         if (items.isNotEmpty()) return items
 
         val reelCount = JSONObject(reelsJson).optJSONObject("reels")?.length() ?: 0
@@ -155,7 +157,12 @@ object InstagramDownloader {
         return body
     }
 
-    private fun extractStoryMedia(reelsJson: String, userId: String, mediaId: String): List<MediaResult> {
+    private fun extractStoryMedia(
+        reelsJson: String,
+        userId: String,
+        mediaId: String,
+        quality: DownloadQuality
+    ): List<MediaResult> {
         val reels = JSONObject(reelsJson).optJSONObject("reels") ?: return emptyList()
         val reel = reels.optJSONObject(userId) ?: run {
             val keys = reels.keys()
@@ -172,26 +179,50 @@ object InstagramDownloader {
             val id = item.optString("id")
             val pk = item.optString("pk")
             if (id == mediaId || id.startsWith("${mediaId}_") || pk == mediaId) {
-                return extractSingleStoryItem(item)?.let { listOf(it) } ?: emptyList()
+                return extractSingleStoryItem(item, quality)?.let { listOf(it) } ?: emptyList()
             }
         }
         return emptyList()
     }
 
-    private fun extractSingleStoryItem(item: JSONObject): MediaResult? {
-        val poster = item.optJSONObject("image_versions2")
-            ?.optJSONArray("candidates")
-            ?.optJSONObject(0)
+    private fun extractSingleStoryItem(item: JSONObject, quality: DownloadQuality): MediaResult? {
+        val imageCandidates = item.optJSONObject("image_versions2")?.optJSONArray("candidates")
+        val imageIndex = if (quality == DownloadQuality.DATA_SAVER) {
+            (imageCandidates?.length() ?: 1) - 1
+        } else 0
+        val poster = imageCandidates
+            ?.optJSONObject(imageIndex.coerceAtLeast(0))
             ?.optString("url")
             ?.takeIf { it.isNotBlank() }
 
-        item.optJSONArray("video_versions")
-            ?.optJSONObject(0)
+        val videoVersions = item.optJSONArray("video_versions")
+        val videoIndex = if (quality == DownloadQuality.DATA_SAVER) {
+            (videoVersions?.length() ?: 1) - 1
+        } else 0
+        videoVersions
+            ?.optJSONObject(videoIndex.coerceAtLeast(0))
             ?.optString("url")
             ?.takeIf { it.isNotBlank() }
             ?.let { return MediaResult(it, isVideo = true, thumbnailUrl = poster) }
 
         poster?.let { return MediaResult(it, isVideo = false, thumbnailUrl = it) }
+
+        return null
+    }
+
+    private fun embedRefusalOrNull(html: String): String? {
+        if (html.contains("Please wait a few minutes before you try again"))
+            return "Instagram is rate-limiting this device. Wait a few minutes and try again."
+
+        if (html.contains("\"contextJSON\":null"))
+            return "Instagram would not serve this post to a logged-out client. " +
+                    "That usually means it is age-restricted or login-gated, but it can also be " +
+                    "private, deleted, or region-blocked — the embed page doesn't say which. " +
+                    "This build is public-only; the login build can fetch it."
+
+        if (!html.contains("\"contextJSON\":\"") && html.contains("/accounts/login/"))
+            return "Instagram served a login wall. " +
+                    "This build only downloads public content."
 
         return null
     }
@@ -212,6 +243,8 @@ object InstagramDownloader {
             ?: throw Exception("Embed HTTP ${response.code}: empty body")
         if (!response.isSuccessful)
             throw Exception("Embed HTTP ${response.code}: ${html.take(120)}")
+
+        embedRefusalOrNull(html)?.let { throw UnsupportedOperationException(it) }
 
         // Instagram now double-encodes JSON inside the embed page:
         // keys/values are delimited by \" and path separators are \\\/
