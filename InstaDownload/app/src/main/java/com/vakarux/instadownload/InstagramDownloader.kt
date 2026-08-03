@@ -5,6 +5,7 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -63,15 +64,15 @@ object InstagramDownloader {
         val shortcode = extractShortcode(postUrl)
             ?: throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
 
+        val embedFailure = runCatching { return tryEmbedPage(shortcode) }.exceptionOrNull()
         try {
-            return tryEmbedPage(shortcode)
-        } catch (e: UnsupportedOperationException) {
-            throw e
-        } catch (e: Exception) {
+            return tryPostPage(shortcode)
+        } catch (postFailure: Exception) {
             throw Exception(
                 "Could not fetch this post. It may be private, age-restricted, or deleted. " +
                 "This build only downloads public content — use the login build for private posts and stories.\n\n" +
-                "Embed: ${e.message ?: e.javaClass.simpleName}"
+                "Embed: ${embedFailure?.message ?: "no media found"}\n" +
+                "Post page: ${postFailure.message ?: postFailure.javaClass.simpleName}"
             )
         }
     }
@@ -187,6 +188,7 @@ object InstagramDownloader {
             ?.optJSONObject(0)
             ?.optString("url")
             ?.takeIf { it.isNotBlank() }
+            ?: item.optString("display_url").takeIf { it.isNotBlank() }
 
         item.optJSONArray("video_versions")
             ?.optJSONObject(0)
@@ -285,6 +287,72 @@ object InstagramDownloader {
         }
 
         throw Exception("Embed HTTP ${response.code}: no media URL found (${html.length} chars)")
+    }
+
+    private fun tryPostPage(shortcode: String): List<MediaResult> {
+        val response = client.newCall(
+            Request.Builder()
+                .url("https://www.instagram.com/p/$shortcode/")
+                .header("User-Agent", DESKTOP_UA)
+                .get().build()
+        ).execute()
+
+        val html = response.body?.string()
+            ?: throw Exception("Post HTTP ${response.code}: empty body")
+        if (!response.isSuccessful) throw Exception("Post HTTP ${response.code}")
+
+        val expectedMediaId = shortcodeToMediaId(shortcode)
+        Regex("""<script\b[^>]*\bdata-sjs[^>]*>(\{.+?\})</script>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(html)
+            .mapNotNull { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() }
+            .mapNotNull { findPublicProduct(it, expectedMediaId) }
+            .map(::extractProductMedia)
+            .firstOrNull { it.isNotEmpty() }
+            ?.let { return it }
+        throw Exception("Post HTTP ${response.code}: no public media found")
+    }
+
+    private fun findPublicProduct(value: Any?, expectedMediaId: String): JSONObject? {
+        when (value) {
+            is JSONObject -> {
+                value.optJSONObject("if_not_gated_logged_out")?.let {
+                    if (it.optString("pk") == expectedMediaId || it.optString("id") == expectedMediaId)
+                        return it
+                }
+                if ((value.optString("pk") == expectedMediaId || value.optString("id") == expectedMediaId) &&
+                    (value.has("video_versions") || value.has("carousel_media") || value.has("image_versions2")))
+                    return value
+
+                val keys = value.keys()
+                while (keys.hasNext()) {
+                    findPublicProduct(value.opt(keys.next()), expectedMediaId)?.let { return it }
+                }
+            }
+            is JSONArray -> for (i in 0 until value.length()) {
+                findPublicProduct(value.opt(i), expectedMediaId)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun extractProductMedia(product: JSONObject): List<MediaResult> {
+        product.optJSONArray("carousel_media")?.let { carousel ->
+            return (0 until carousel.length()).mapNotNull { i ->
+                carousel.optJSONObject(i)?.let(::extractSingleStoryItem)
+            }
+        }
+        return listOfNotNull(extractSingleStoryItem(product))
+    }
+
+    private fun shortcodeToMediaId(shortcode: String): String {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        var id = 0L
+        for (character in shortcode) {
+            val digit = alphabet.indexOf(character)
+            require(digit >= 0) { "Invalid Instagram shortcode" }
+            id = Math.addExact(Math.multiplyExact(id, 64L), digit.toLong())
+        }
+        return id.toString()
     }
 
     private fun mediaRequest(url: String) = Request.Builder()
