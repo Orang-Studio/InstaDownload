@@ -12,7 +12,9 @@ import android.os.Environment
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +24,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -68,17 +71,52 @@ private val IgOrangeDark = Color(0xFF3D1A0A)
 
 class MainActivity : ComponentActivity() {
 
+    private val appSettings by lazy { AppSettings(this) }
+    private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
+
+    private val folderPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri ?: return@registerForActivityResult
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        val name = runCatching { DocumentsContract.getTreeDocumentId(uri).substringAfterLast(':') }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: "Selected folder"
+        appSettings.downloadTreeUri = uri.toString()
+        appSettings.downloadFolderName = name
+        selectedFolderName.value = name
+    }
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ -> /* permission result handled inline */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        selectedFolderName.value = appSettings.downloadFolderName
 
         setContent {
-            InstaDownloadTheme {
+            val settings = appSettings
+            var selectedTheme by remember { mutableStateOf(settings.theme) }
+            val useDarkTheme = when (selectedTheme) {
+                AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                AppTheme.LIGHT -> false
+                AppTheme.DARK -> true
+            }
+            InstaDownloadTheme(darkTheme = useDarkTheme) {
                 val sharedUrl = handleSharedIntent(intent)
-                InstagramDownloaderScreen(initialUrl = sharedUrl)
+                InstagramDownloaderScreen(
+                    initialUrl = sharedUrl,
+                    useDarkTheme = useDarkTheme,
+                    settings = settings,
+                    selectedFolderName = selectedFolderName.value,
+                    onChooseFolder = { folderPickerLauncher.launch(null) },
+                    onThemeChanged = { selectedTheme = it }
+                )
             }
         }
     }
@@ -99,7 +137,14 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun InstagramDownloaderScreen(initialUrl: String = "") {
+    fun InstagramDownloaderScreen(
+        initialUrl: String = "",
+        useDarkTheme: Boolean = isSystemInDarkMode(),
+        settings: AppSettings = AppSettings(this),
+        selectedFolderName: String = settings.downloadFolderName,
+        onChooseFolder: () -> Unit = {},
+        onThemeChanged: (AppTheme) -> Unit = {}
+    ) {
         var url by remember { mutableStateOf(initialUrl) }
         var isLoading by remember { mutableStateOf(false) }
         var isSaving by remember { mutableStateOf(false) }
@@ -107,6 +152,7 @@ class MainActivity : ComponentActivity() {
         var fullError by remember { mutableStateOf<String?>(null) }
         var media by remember { mutableStateOf<List<MediaResult>?>(null) }
         var downloadComplete by remember { mutableStateOf(false) }
+        var showSettings by remember { mutableStateOf(false) }
 
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
@@ -116,7 +162,7 @@ class MainActivity : ComponentActivity() {
         val isStory = isStoryUrl(url.trim())
 
         val igGradient = Brush.verticalGradient(
-            colors = if (isSystemInDarkMode()) {
+            colors = if (useDarkTheme) {
                 listOf(IgPurpleDark, IgPinkDark, IgOrangeDark)
             } else {
                 listOf(IgPurple, IgPink, IgOrange)
@@ -145,8 +191,18 @@ class MainActivity : ComponentActivity() {
                 fullError = items.exceptionOrNull()?.message ?: "Something went wrong"
                 return@LaunchedEffect
             }
-            hapticStart(context)
+            hapticStart(context, settings.hapticsEnabled)
             media = items.getOrThrow()
+        }
+
+        if (showSettings) {
+            SettingsDialog(
+                settings = settings,
+                selectedFolderName = selectedFolderName,
+                onChooseFolder = onChooseFolder,
+                onThemeChanged = onThemeChanged,
+                onDismiss = { showSettings = false }
+            )
         }
 
         Scaffold(
@@ -351,18 +407,21 @@ class MainActivity : ComponentActivity() {
                                             }
                                             fetched.getOrThrow().also { media = it }
                                         }
-                                        hapticStart(context)
+                                        hapticStart(context, settings.hapticsEnabled)
                                         isSaving = true
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
                                                 items.forEachIndexed { i, item ->
-                                                    saveToDownloads(item.url, item.isVideo, i, context)
+                                                    saveToDownloads(
+                                                        item.url, item.isVideo, i, context,
+                                                        settings.downloadTreeUri
+                                                    )
                                                 }
                                             }
                                         }
                                         isSaving = false
                                         if (dlResult.isSuccess) {
-                                            hapticComplete(context)
+                                            hapticComplete(context, settings.hapticsEnabled)
                                             downloadComplete = true
                                             delay(2500)
                                             downloadComplete = false
@@ -580,6 +639,24 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
+
+            Row(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                IconButton(
+                    onClick = { showSettings = true },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Black.copy(alpha = 0.18f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(AppIcons.Settings, contentDescription = "Settings")
+                }
+            }
         }
     }
 
@@ -631,6 +708,94 @@ class MainActivity : ComponentActivity() {
                         color = Color.White.copy(alpha = 0.85f)
                     )
                 )
+            }
+        }
+    }
+
+    @Composable
+    private fun SettingsDialog(
+        settings: AppSettings,
+        selectedFolderName: String,
+        onChooseFolder: () -> Unit,
+        onThemeChanged: (AppTheme) -> Unit,
+        onDismiss: () -> Unit
+    ) {
+        var haptics by remember { mutableStateOf(settings.hapticsEnabled) }
+        var theme by remember { mutableStateOf(settings.theme) }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Settings") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    SettingsHeading("Download location")
+                    Text(selectedFolderName, style = MaterialTheme.typography.bodyLarge)
+                    OutlinedButton(
+                        onClick = onChooseFolder,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) { Text("Choose folder") }
+                    SettingsHeading("Appearance")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Haptic feedback", style = MaterialTheme.typography.bodyLarge)
+                            Text("Vibrate for download events", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            checked = haptics,
+                            onCheckedChange = {
+                                haptics = it
+                                settings.hapticsEnabled = it
+                            }
+                        )
+                    }
+                    AppTheme.entries.forEach { option ->
+                        SettingsRadio(option.label, null, theme == option) {
+                            theme = option
+                            settings.theme = option
+                            onThemeChanged(option)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+        )
+    }
+
+    @Composable
+    private fun SettingsHeading(text: String) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+        )
+    }
+
+    @Composable
+    private fun SettingsRadio(
+        title: String,
+        description: String?,
+        selected: Boolean,
+        onClick: () -> Unit
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Column(modifier = Modifier.padding(start = 8.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         }
     }
@@ -703,28 +868,49 @@ class MainActivity : ComponentActivity() {
 
     // ── Download logic ─────────────────────────────────────────────
 
-    private fun saveToDownloads(mediaUrl: String, isVideo: Boolean, index: Int, context: Context) {
+    private fun saveToDownloads(
+        mediaUrl: String,
+        isVideo: Boolean,
+        index: Int,
+        context: Context,
+        downloadTreeUri: String?
+    ) {
         val ts = System.currentTimeMillis() + index
         val fileName = if (isVideo) "instagram_video_$ts.mp4" else "instagram_image_$ts.jpg"
         val mimeType = if (isVideo) "video/mp4" else "image/jpeg"
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (downloadTreeUri != null) {
+            val treeUri = Uri.parse(downloadTreeUri)
+            val parent = DocumentsContract.buildDocumentUriUsingTree(
+                treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+            )
+            val fileUri = DocumentsContract.createDocument(
+                context.contentResolver, parent, mimeType, fileName
+            ) ?: throw Exception("Could not create file in the selected folder")
+            context.contentResolver.openOutputStream(fileUri)?.use { out ->
+                InstagramDownloader.downloadToStream(mediaUrl, out)
+            } ?: throw Exception("Could not write to the selected folder")
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                put(MediaStore.Downloads.MIME_TYPE, mimeType)
-                put(MediaStore.Downloads.IS_PENDING, 1)
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/InstaDownload")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val uri = resolver.insert(collection, values)
                 ?: throw Exception("Could not create file in Downloads")
             resolver.openOutputStream(uri)?.use { out ->
                 InstagramDownloader.downloadToStream(mediaUrl, out)
             }
             values.clear()
-            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
         } else {
-            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val dir = java.io.File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "InstaDownload"
+            ).apply { mkdirs() }
             val file = java.io.File(dir, fileName)
             InstagramDownloader.downloadToStream(mediaUrl, file.outputStream())
         }
@@ -752,7 +938,8 @@ class MainActivity : ComponentActivity() {
     // ── Haptics ────────────────────────────────────────────────────
 
     // Single crisp tick — download queued
-    private fun hapticStart(context: Context) {
+    private fun hapticStart(context: Context, enabled: Boolean = true) {
+        if (!enabled) return
         val v = vibrator(context)
         if (!v.hasVibrator()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -769,7 +956,8 @@ class MainActivity : ComponentActivity() {
     }
 
     // Light tick then strong click — download finished
-    private fun hapticComplete(context: Context) {
+    private fun hapticComplete(context: Context, enabled: Boolean = true) {
+        if (!enabled) return
         val v = vibrator(context)
         if (!v.hasVibrator()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

@@ -63,18 +63,17 @@ object InstagramDownloader {
         val shortcode = extractShortcode(postUrl)
             ?: throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
 
-        val embedError: String
         try {
             return tryEmbedPage(shortcode)
+        } catch (e: UnsupportedOperationException) {
+            throw e
         } catch (e: Exception) {
-            embedError = e.message ?: e.javaClass.simpleName
+            throw Exception(
+                "Could not fetch this post. It may be private, age-restricted, or deleted. " +
+                "This build only downloads public content — use the login build for private posts and stories.\n\n" +
+                "Embed: ${e.message ?: e.javaClass.simpleName}"
+            )
         }
-
-        throw Exception(
-            "Could not fetch this post. It may be private, age-restricted, or deleted. " +
-            "This build only downloads public content — use the login build for private posts and stories.\n\n" +
-            "Embed: $embedError"
-        )
     }
 
     // ── Public story probe ─────────────────────────────────────────────────
@@ -155,7 +154,11 @@ object InstagramDownloader {
         return body
     }
 
-    private fun extractStoryMedia(reelsJson: String, userId: String, mediaId: String): List<MediaResult> {
+    private fun extractStoryMedia(
+        reelsJson: String,
+        userId: String,
+        mediaId: String
+    ): List<MediaResult> {
         val reels = JSONObject(reelsJson).optJSONObject("reels") ?: return emptyList()
         val reel = reels.optJSONObject(userId) ?: run {
             val keys = reels.keys()
@@ -196,6 +199,23 @@ object InstagramDownloader {
         return null
     }
 
+    private fun embedRefusalOrNull(html: String): String? {
+        if (html.contains("Please wait a few minutes before you try again"))
+            return "Instagram is rate-limiting this device. Wait a few minutes and try again."
+
+        if (html.contains("\"contextJSON\":null"))
+            return "Instagram would not serve this post to a logged-out client. " +
+                    "That usually means it is age-restricted or login-gated, but it can also be " +
+                    "private, deleted, or region-blocked — the embed page doesn't say which. " +
+                    "This build is public-only; the login build can fetch it."
+
+        if (!html.contains("\"contextJSON\":\"") && html.contains("/accounts/login/"))
+            return "Instagram served a login wall. " +
+                    "This build only downloads public content."
+
+        return null
+    }
+
     // ── Strategy 1: embed page ──────────────────────────────────────────────
     private fun tryEmbedPage(shortcode: String): List<MediaResult> {
         val response = client.newCall(
@@ -212,6 +232,8 @@ object InstagramDownloader {
             ?: throw Exception("Embed HTTP ${response.code}: empty body")
         if (!response.isSuccessful)
             throw Exception("Embed HTTP ${response.code}: ${html.take(120)}")
+
+        embedRefusalOrNull(html)?.let { throw UnsupportedOperationException(it) }
 
         // Instagram now double-encodes JSON inside the embed page:
         // keys/values are delimited by \" and path separators are \\\/
