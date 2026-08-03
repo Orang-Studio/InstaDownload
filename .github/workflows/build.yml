@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       apk_name: ${{ steps.prepare.outputs.apk_name }}
     steps:
@@ -58,6 +60,8 @@ jobs:
   build-stories:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       apk_name: ${{ steps.prepare.outputs.apk_name }}
     steps:
