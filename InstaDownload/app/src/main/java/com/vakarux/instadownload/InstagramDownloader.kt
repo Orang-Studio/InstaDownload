@@ -293,7 +293,7 @@ object InstagramDownloader {
         val response = client.newCall(
             Request.Builder()
                 .url("https://www.instagram.com/p/$shortcode/")
-                .header("User-Agent", DESKTOP_UA)
+                .header("User-Agent", "Googlebot/2.1 (+http://www.google.com/bot.html)")
                 .get().build()
         ).execute()
 
