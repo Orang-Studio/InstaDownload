@@ -58,12 +58,16 @@ object InstagramDownloader {
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaItems(postUrl: String, session: IgSession? = null): List<MediaResult> {
+    fun getMediaItems(
+        postUrl: String,
+        session: IgSession? = null,
+        quality: DownloadQuality = DownloadQuality.BEST
+    ): List<MediaResult> {
         extractStory(postUrl)?.let { story ->
             val s = session ?: throw UnsupportedOperationException(
                 "Stories are login-only. Tap Log in with Instagram, then try again."
             )
-            return tryMediaInfoApi(story.mediaId, s)
+            return tryMediaInfoApi(story.mediaId, s, quality)
         }
 
         val shortcode = extractShortcode(postUrl)
@@ -78,7 +82,7 @@ object InstagramDownloader {
 
         if (session != null) {
             try {
-                return tryMediaInfoApi(shortcodeToMediaId(shortcode), session)
+                return tryMediaInfoApi(shortcodeToMediaId(shortcode), session, quality)
             } catch (e: Exception) {
                 throw Exception(
                     "Could not fetch this post.\n\n" +
@@ -95,7 +99,9 @@ object InstagramDownloader {
         )
     }
 
-    private fun tryMediaInfoApi(mediaId: String, session: IgSession): List<MediaResult> {
+    private fun tryMediaInfoApi(
+        mediaId: String, session: IgSession, quality: DownloadQuality
+    ): List<MediaResult> {
         val cookie = listOfNotNull(
             "sessionid=${session.sessionId}",
             session.csrfToken?.let { "csrftoken=$it" },
@@ -121,18 +127,23 @@ object InstagramDownloader {
             ?: throw Exception("Media info HTTP ${resp.code}: ${json.optString("message").ifBlank { "no media returned" }}")
 
         item.optJSONArray("carousel_media")?.let { slides ->
-            val items = (0 until slides.length()).mapNotNull { slides.optJSONObject(it)?.let(::extractNode) }
+            val items = (0 until slides.length()).mapNotNull {
+                slides.optJSONObject(it)?.let { node -> extractNode(node, quality) }
+            }
             if (items.isNotEmpty()) return items
         }
-        return extractNode(item)?.let { listOf(it) }
+        return extractNode(item, quality)?.let { listOf(it) }
             ?: throw Exception("Media info: no downloadable media")
     }
 
-    private fun extractNode(item: JSONObject): MediaResult? {
-        val poster = item.optJSONObject("image_versions2")
-            ?.optJSONArray("candidates")?.optJSONObject(0)
+    private fun extractNode(item: JSONObject, quality: DownloadQuality): MediaResult? {
+        val images = item.optJSONObject("image_versions2")?.optJSONArray("candidates")
+        val imageIndex = if (quality == DownloadQuality.DATA_SAVER) (images?.length() ?: 1) - 1 else 0
+        val poster = images?.optJSONObject(imageIndex.coerceAtLeast(0))
             ?.optString("url")?.takeIf { it.isNotBlank() }
-        item.optJSONArray("video_versions")?.optJSONObject(0)
+        val videos = item.optJSONArray("video_versions")
+        val videoIndex = if (quality == DownloadQuality.DATA_SAVER) (videos?.length() ?: 1) - 1 else 0
+        videos?.optJSONObject(videoIndex.coerceAtLeast(0))
             ?.optString("url")?.takeIf { it.isNotBlank() }
             ?.let { return MediaResult(it, isVideo = true, thumbnailUrl = poster) }
         return poster?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
