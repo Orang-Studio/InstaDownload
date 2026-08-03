@@ -226,24 +226,6 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            Row(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                IconButton(
-                    onClick = { showSettings = true },
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color.Black.copy(alpha = 0.18f),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Icon(AppIcons.Settings, contentDescription = "Settings")
-                }
-            }
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -656,6 +638,24 @@ class MainActivity : ComponentActivity() {
                 GitHubCredit()
 
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            Row(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                IconButton(
+                    onClick = { showSettings = true },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Black.copy(alpha = 0.18f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(AppIcons.Settings, contentDescription = "Settings")
+                }
             }
         }
     }
