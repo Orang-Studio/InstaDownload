@@ -72,7 +72,7 @@ private val IgOrangeDark = Color(0xFF3D1A0A)
 class MainActivity : ComponentActivity() {
 
     private val appSettings by lazy { AppSettings(this) }
-    private val selectedFolderName = mutableStateOf("Downloads (default)")
+    private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -111,6 +111,7 @@ class MainActivity : ComponentActivity() {
                 val sharedUrl = handleSharedIntent(intent)
                 InstagramDownloaderScreen(
                     initialUrl = sharedUrl,
+                    useDarkTheme = useDarkTheme,
                     settings = settings,
                     selectedFolderName = selectedFolderName.value,
                     onChooseFolder = { folderPickerLauncher.launch(null) },
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun InstagramDownloaderScreen(
         initialUrl: String = "",
+        useDarkTheme: Boolean = isSystemInDarkMode(),
         settings: AppSettings = AppSettings(this),
         selectedFolderName: String = settings.downloadFolderName,
         onChooseFolder: () -> Unit = {},
@@ -160,7 +162,7 @@ class MainActivity : ComponentActivity() {
         val isStory = isStoryUrl(url.trim())
 
         val igGradient = Brush.verticalGradient(
-            colors = if (isSystemInDarkMode()) {
+            colors = if (useDarkTheme) {
                 listOf(IgPurpleDark, IgPinkDark, IgOrangeDark)
             } else {
                 listOf(IgPurple, IgPink, IgOrange)
@@ -181,7 +183,7 @@ class MainActivity : ComponentActivity() {
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(trimmed, settings.effectiveQuality())
+                    InstagramDownloader.getMediaItems(trimmed)
                 }
             }
             isLoading = false
@@ -395,9 +397,7 @@ class MainActivity : ComponentActivity() {
                                             isLoading = true
                                             val fetched = runCatching {
                                                 withContext(Dispatchers.IO) {
-                                                    InstagramDownloader.getMediaItems(
-                                                        trimmed, settings.effectiveQuality()
-                                                    )
+                                                    InstagramDownloader.getMediaItems(trimmed)
                                                 }
                                             }
                                             isLoading = false
@@ -720,7 +720,6 @@ class MainActivity : ComponentActivity() {
         onThemeChanged: (AppTheme) -> Unit,
         onDismiss: () -> Unit
     ) {
-        var quality by remember { mutableStateOf(settings.quality) }
         var haptics by remember { mutableStateOf(settings.hapticsEnabled) }
         var theme by remember { mutableStateOf(settings.theme) }
 
@@ -739,13 +738,6 @@ class MainActivity : ComponentActivity() {
                         onClick = onChooseFolder,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     ) { Text("Choose folder") }
-                    SettingsHeading("Download quality")
-                    DownloadQuality.entries.forEach { option ->
-                        SettingsRadio(option.label, option.description, quality == option) {
-                            quality = option
-                            settings.quality = option
-                        }
-                    }
                     SettingsHeading("Appearance")
                     Row(
                         modifier = Modifier.fillMaxWidth(),

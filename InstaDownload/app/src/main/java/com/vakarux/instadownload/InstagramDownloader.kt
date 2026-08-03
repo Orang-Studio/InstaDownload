@@ -55,12 +55,9 @@ object InstagramDownloader {
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaItems(
-        postUrl: String,
-        quality: DownloadQuality = DownloadQuality.BEST
-    ): List<MediaResult> {
+    fun getMediaItems(postUrl: String): List<MediaResult> {
         extractStory(postUrl)?.let { story ->
-            return tryPublicStory(story, quality)
+            return tryPublicStory(story)
         }
 
         val shortcode = extractShortcode(postUrl)
@@ -84,10 +81,10 @@ object InstagramDownloader {
     // Public profile metadata is available anonymously, but normal story media
     // is only usable here if Instagram returns it from the public reels endpoint.
     // Current logged-out responses for normal user stories are usually empty.
-    private fun tryPublicStory(story: StoryRequest, quality: DownloadQuality): List<MediaResult> {
+    private fun tryPublicStory(story: StoryRequest): List<MediaResult> {
         val userId = fetchPublicUserId(story.username)
         val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username)
-        val items = extractStoryMedia(reelsJson, userId, story.mediaId, quality)
+        val items = extractStoryMedia(reelsJson, userId, story.mediaId)
         if (items.isNotEmpty()) return items
 
         val reelCount = JSONObject(reelsJson).optJSONObject("reels")?.length() ?: 0
@@ -160,8 +157,7 @@ object InstagramDownloader {
     private fun extractStoryMedia(
         reelsJson: String,
         userId: String,
-        mediaId: String,
-        quality: DownloadQuality
+        mediaId: String
     ): List<MediaResult> {
         val reels = JSONObject(reelsJson).optJSONObject("reels") ?: return emptyList()
         val reel = reels.optJSONObject(userId) ?: run {
@@ -179,28 +175,21 @@ object InstagramDownloader {
             val id = item.optString("id")
             val pk = item.optString("pk")
             if (id == mediaId || id.startsWith("${mediaId}_") || pk == mediaId) {
-                return extractSingleStoryItem(item, quality)?.let { listOf(it) } ?: emptyList()
+                return extractSingleStoryItem(item)?.let { listOf(it) } ?: emptyList()
             }
         }
         return emptyList()
     }
 
-    private fun extractSingleStoryItem(item: JSONObject, quality: DownloadQuality): MediaResult? {
-        val imageCandidates = item.optJSONObject("image_versions2")?.optJSONArray("candidates")
-        val imageIndex = if (quality == DownloadQuality.DATA_SAVER) {
-            (imageCandidates?.length() ?: 1) - 1
-        } else 0
-        val poster = imageCandidates
-            ?.optJSONObject(imageIndex.coerceAtLeast(0))
+    private fun extractSingleStoryItem(item: JSONObject): MediaResult? {
+        val poster = item.optJSONObject("image_versions2")
+            ?.optJSONArray("candidates")
+            ?.optJSONObject(0)
             ?.optString("url")
             ?.takeIf { it.isNotBlank() }
 
-        val videoVersions = item.optJSONArray("video_versions")
-        val videoIndex = if (quality == DownloadQuality.DATA_SAVER) {
-            (videoVersions?.length() ?: 1) - 1
-        } else 0
-        videoVersions
-            ?.optJSONObject(videoIndex.coerceAtLeast(0))
+        item.optJSONArray("video_versions")
+            ?.optJSONObject(0)
             ?.optString("url")
             ?.takeIf { it.isNotBlank() }
             ?.let { return MediaResult(it, isVideo = true, thumbnailUrl = poster) }
