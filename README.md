@@ -44,7 +44,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 
 ## iOS
 
-The folder [`InstaDownloadiOS/`](InstaDownloadiOS) holds an iOS remake of this app. It uses SwiftUI and Apple's Liquid Glass design language. You distribute it through AltStore, not the App Store. See its [README](InstaDownloadiOS/README.md) for build and publish steps.
+An iOS remake lives in [`InstaDownloadiOS/`](InstaDownloadiOS): the same app rebuilt in SwiftUI with Apple's Liquid Glass design language, distributed through AltStore rather than the App Store. See its [README](InstaDownloadiOS/README.md) for building and publishing.
 
 ## Screenshots
 
