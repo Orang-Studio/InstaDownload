@@ -1,0 +1,13 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Build artifacts
+*.ipa
+*.dSYM.zip
+*.dSYM
+Payload/

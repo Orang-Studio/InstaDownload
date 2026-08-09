@@ -1,0 +1,42 @@
+{
+  "name": "InstaDownload",
+  "subtitle": "Save Instagram reels & posts to your device",
+  "description": "Official AltStore source for InstaDownload, an open-source, no-account Instagram downloader for iOS.",
+  "iconURL": "https://raw.githubusercontent.com/Orang-Studio/InstaDownload/main/fastlane/metadata/android/en-US/images/icon.png",
+  "website": "https://github.com/Orang-Studio/InstaDownload",
+  "tintColor": "E1306C",
+  "nsfw": false,
+  "apps": [
+    {
+      "name": "InstaDownload",
+      "bundleIdentifier": "com.vakarux.instadownload",
+      "developerName": "Vakarux",
+      "subtitle": "Save reels & posts to your device",
+      "localizedDescription": "InstaDownload saves public Instagram reels, photos and carousels straight to your photo library or a folder in Files.\n\n• Paste a link, the preview loads on its own\n• Saves videos, single photos and full carousels\n• No account, no login, no tracking, no ads\n• Liquid Glass interface built for iOS 26\n• Light, dark and system themes\n\nInstaDownload only downloads public content. Stories and private posts are served by Instagram to logged-in accounts only, so they can't be fetched here.\n\nOpen source under the GPL: github.com/Orang-Studio/InstaDownload",
+      "iconURL": "https://raw.githubusercontent.com/Orang-Studio/InstaDownload/main/fastlane/metadata/android/en-US/images/icon.png",
+      "tintColor": "E1306C",
+      "category": "utilities",
+      "screenshots": [
+        "https://raw.githubusercontent.com/Orang-Studio/InstaDownload/main/img/lighttheme.png",
+        "https://raw.githubusercontent.com/Orang-Studio/InstaDownload/main/img/darktheme.png"
+      ],
+      "versions": [
+        {
+          "version": "2.4.0",
+          "buildVersion": "12",
+          "date": "2026-08-09",
+          "localizedDescription": "First iOS release. Rebuilt in SwiftUI with Apple's Liquid Glass design language, saving to the photo library or a folder you choose in Files.",
+          "downloadURL": "https://github.com/Orang-Studio/InstaDownload/releases/download/v2.4.0-ios/InstaDownload.ipa",
+          "size": 0,
+          "minOSVersion": "17.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSPhotoLibraryAddUsageDescription": "InstaDownload saves the reels and photos you download straight into your photo library."
+        }
+      }
+    }
+  ]
+}

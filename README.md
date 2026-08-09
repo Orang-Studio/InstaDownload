@@ -42,6 +42,10 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 > [!IMPORTANT]
 > The **Stories version** requires you to log in to Instagram. Only download it from the official [InstaDownload releases page](https://github.com/Orang-Studio/InstaDownload/releases).
 
+## iOS
+
+The folder [`InstaDownloadiOS/`](InstaDownloadiOS) holds an iOS remake of this app. It uses SwiftUI and Apple's Liquid Glass design language. You distribute it through AltStore, not the App Store. See its [README](InstaDownloadiOS/README.md) for build and publish steps.
+
 ## Screenshots
 
 <p align="center">
