@@ -901,22 +901,12 @@ class MainActivity : ComponentActivity() {
             }
 
             if (isCarousel) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) IgPink else Color.White)
-                        .clickable(onClick = onToggleSelected),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isSelected) AppIcons.CheckCircle else AppIcons.RadioButtonUnchecked,
-                        contentDescription = if (isSelected) "Selected — tap to exclude" else "Excluded — tap to include",
-                        tint = if (isSelected) Color.White else Color.Black.copy(alpha = 0.4f),
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelected() },
+                    colors = CheckboxDefaults.colors(checkedColor = IgPink),
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
             }
         }
     }
