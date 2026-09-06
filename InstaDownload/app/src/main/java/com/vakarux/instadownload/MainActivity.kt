@@ -37,6 +37,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -151,6 +152,7 @@ class MainActivity : ComponentActivity() {
         var urlError by remember { mutableStateOf<String?>(null) }
         var fullError by remember { mutableStateOf<String?>(null) }
         var media by remember { mutableStateOf<List<MediaResult>?>(null) }
+        var deselectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
@@ -180,10 +182,11 @@ class MainActivity : ComponentActivity() {
             urlError = null
             fullError = null
             media = null
+            deselectedIndices = emptySet()
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(trimmed)
+                    InstagramDownloader.getMediaItems(trimmed, settings.effectiveQuality())
                 }
             }
             isLoading = false
@@ -397,7 +400,7 @@ class MainActivity : ComponentActivity() {
                                             isLoading = true
                                             val fetched = runCatching {
                                                 withContext(Dispatchers.IO) {
-                                                    InstagramDownloader.getMediaItems(trimmed)
+                                                    InstagramDownloader.getMediaItems(trimmed, settings.effectiveQuality())
                                                 }
                                             }
                                             isLoading = false
@@ -407,11 +410,14 @@ class MainActivity : ComponentActivity() {
                                             }
                                             fetched.getOrThrow().also { media = it }
                                         }
+                                        val itemsToSave = items.filterIndexed { i, _ ->
+                                            i !in deselectedIndices
+                                        }
                                         hapticStart(context, settings.hapticsEnabled)
                                         isSaving = true
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
-                                                items.forEachIndexed { i, item ->
+                                                itemsToSave.forEachIndexed { i, item ->
                                                     saveToDownloads(
                                                         item.url, item.isVideo, i, context,
                                                         settings.downloadTreeUri
@@ -426,6 +432,7 @@ class MainActivity : ComponentActivity() {
                                             delay(2500)
                                             downloadComplete = false
                                             media = null
+                                            deselectedIndices = emptySet()
                                         } else {
                                             fullError = dlResult.exceptionOrNull()?.message ?: "Download failed"
                                         }
@@ -435,7 +442,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp),
-                            enabled = !isSaving && !isStory,
+                            enabled = !isSaving && !isStory && media?.size != deselectedIndices.size,
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = IgPink,
@@ -527,7 +534,17 @@ class MainActivity : ComponentActivity() {
                                     .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                items.forEach { item -> MediaThumbnail(item) }
+                                items.forEachIndexed { index, item ->
+                                    MediaThumbnail(
+                                        item = item,
+                                        isCarousel = items.size > 1,
+                                        isSelected = index !in deselectedIndices,
+                                        onToggleSelected = {
+                                            deselectedIndices = if (index in deselectedIndices)
+                                                deselectedIndices - index else deselectedIndices + index
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -720,6 +737,7 @@ class MainActivity : ComponentActivity() {
         onThemeChanged: (AppTheme) -> Unit,
         onDismiss: () -> Unit
     ) {
+        var quality by remember { mutableStateOf(settings.quality) }
         var haptics by remember { mutableStateOf(settings.hapticsEnabled) }
         var theme by remember { mutableStateOf(settings.theme) }
 
@@ -738,6 +756,13 @@ class MainActivity : ComponentActivity() {
                         onClick = onChooseFolder,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     ) { Text("Choose folder") }
+                    SettingsHeading("Download quality")
+                    DownloadQuality.entries.forEach { option ->
+                        SettingsRadio(option.label, option.description, quality == option) {
+                            quality = option
+                            settings.quality = option
+                        }
+                    }
                     SettingsHeading("Appearance")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -801,7 +826,12 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun MediaThumbnail(item: MediaResult) {
+    private fun MediaThumbnail(
+        item: MediaResult,
+        isCarousel: Boolean = false,
+        isSelected: Boolean = true,
+        onToggleSelected: () -> Unit = {}
+    ) {
         val previewUrl = item.previewUrl
         var loadFailed by remember(previewUrl) { mutableStateOf(false) }
         val bitmap by produceState<ImageBitmap?>(initialValue = null, previewUrl) {
@@ -819,47 +849,72 @@ class MainActivity : ComponentActivity() {
             value = bmp
         }
 
-        Box(
-            modifier = Modifier
-                .size(width = 120.dp, height = 150.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.Black.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            val bmp = bitmap
-            when {
-                bmp != null -> Image(
-                    bitmap = bmp,
-                    contentDescription = if (item.isVideo) "Video preview" else "Image preview",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                previewUrl == null || loadFailed -> Icon(
-                    imageVector = if (item.isVideo) AppIcons.Movie else AppIcons.Image,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.size(36.dp)
-                )
-                else -> CircularProgressIndicator(
-                    color = Color.White,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(24.dp)
-                )
+        Box(modifier = Modifier.size(width = 120.dp, height = 158.dp)) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .size(width = 120.dp, height = 150.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.15f))
+                    .clickable(enabled = isCarousel, onClick = onToggleSelected),
+                contentAlignment = Alignment.Center
+            ) {
+                val bmp = bitmap
+                when {
+                    bmp != null -> Image(
+                        bitmap = bmp,
+                        contentDescription = if (item.isVideo) "Video preview" else "Image preview",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(if (isCarousel && !isSelected) 0.35f else 1f)
+                    )
+                    previewUrl == null || loadFailed -> Icon(
+                        imageVector = if (item.isVideo) AppIcons.Movie else AppIcons.Image,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(36.dp)
+                    )
+                    else -> CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                if (item.isVideo && bmp != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.45f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             }
 
-            if (item.isVideo && bmp != null) {
+            if (isCarousel) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .align(Alignment.TopEnd)
+                        .size(28.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.45f)),
+                        .background(if (isSelected) IgPink else Color.White)
+                        .clickable(onClick = onToggleSelected),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = AppIcons.PlayArrow,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
+                        imageVector = if (isSelected) AppIcons.CheckCircle else AppIcons.RadioButtonUnchecked,
+                        contentDescription = if (isSelected) "Selected — tap to exclude" else "Excluded — tap to include",
+                        tint = if (isSelected) Color.White else Color.Black.copy(alpha = 0.4f),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
@@ -919,7 +974,7 @@ class MainActivity : ComponentActivity() {
     private fun isValidInstagramUrl(url: String): Boolean =
         Pattern.compile(
             "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+"
-        ).matcher(url).find()
+        ).matcher(url).find() || isStoryUrl(url) || InstagramDownloader.isProfileUrl(url)
 
     private fun isStoryUrl(url: String): Boolean =
         Pattern.compile(

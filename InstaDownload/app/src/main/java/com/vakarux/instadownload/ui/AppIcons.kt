@@ -15,6 +15,22 @@ object AppIcons {
         )
     }
 
+    val CheckCircle: ImageVector by lazy {
+        materialIcon(
+            "CheckCircle",
+            "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10s10,-4.48 10,-10S17.52,2 12,2zM10,17l-5,-5" +
+                "l1.41,-1.41L10,14.17l7.59,-7.59L19,8L10,17z"
+        )
+    }
+
+    val RadioButtonUnchecked: ImageVector by lazy {
+        materialIcon(
+            "RadioButtonUnchecked",
+            "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10s10,-4.48 10,-10S17.52,2 12,2zM12,20" +
+                "c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8s8,3.58 8,8S16.42,20 12,20z"
+        )
+    }
+
     val ContentPaste: ImageVector by lazy {
         materialIcon(
             "ContentPaste",

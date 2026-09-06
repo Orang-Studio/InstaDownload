@@ -27,6 +27,13 @@ object InstagramDownloader {
     private val STORY_REGEX = Pattern.compile(
         "(?:instagram\\.com|instagr\\.am)/stories/([A-Za-z0-9._]+)/([0-9]+)"
     )
+    private val PROFILE_REGEX = Pattern.compile(
+        "^https?://(?:www\\.)?(?:instagram\\.com|instagr\\.am)/([A-Za-z0-9_.]+)/?(?:[?#].*)?$"
+    )
+    private val RESERVED_PROFILE_PATHS = setOf(
+        "p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct",
+        "about", "developer", "legal", "privacy", "graphql", "web", "download", "emails", "topics"
+    )
 
     private data class StoryRequest(val username: String, val mediaId: String)
 
@@ -54,16 +61,20 @@ object InstagramDownloader {
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaItems(postUrl: String): List<MediaResult> {
+    fun getMediaItems(postUrl: String, quality: DownloadQuality = DownloadQuality.BEST): List<MediaResult> {
         extractStory(postUrl)?.let { story ->
-            return tryPublicStory(story)
+            return tryPublicStory(story, quality)
         }
 
-        val shortcode = extractShortcode(postUrl)
-            ?: throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
+        val shortcode = extractShortcode(postUrl) ?: run {
+            extractProfileUsername(postUrl)?.let { username ->
+                return listOf(fetchProfilePicture(username))
+            }
+            throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
+        }
 
         try {
-            return tryPostPage(shortcode)
+            return tryPostPage(shortcode, quality)
         } catch (postFailure: Exception) {
             throw Exception(
                 "Could not fetch this post. It may be private, age-restricted, or deleted. " +
@@ -73,10 +84,10 @@ object InstagramDownloader {
         }
     }
 
-    private fun tryPublicStory(story: StoryRequest): List<MediaResult> {
+    private fun tryPublicStory(story: StoryRequest, quality: DownloadQuality): List<MediaResult> {
         val userId = fetchPublicUserId(story.username)
         val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username)
-        val items = extractStoryMedia(reelsJson, userId, story.mediaId)
+        val items = extractStoryMedia(reelsJson, userId, story.mediaId, quality)
         if (items.isNotEmpty()) return items
 
         val reelCount = JSONObject(reelsJson).optJSONObject("reels")?.length() ?: 0
@@ -149,7 +160,8 @@ object InstagramDownloader {
     private fun extractStoryMedia(
         reelsJson: String,
         userId: String,
-        mediaId: String
+        mediaId: String,
+        quality: DownloadQuality
     ): List<MediaResult> {
         val reels = JSONObject(reelsJson).optJSONObject("reels") ?: return emptyList()
         val reel = reels.optJSONObject(userId) ?: run {
@@ -167,32 +179,54 @@ object InstagramDownloader {
             val id = item.optString("id")
             val pk = item.optString("pk")
             if (id == mediaId || id.startsWith("${mediaId}_") || pk == mediaId) {
-                return extractSingleStoryItem(item)?.let { listOf(it) } ?: emptyList()
+                return extractSingleStoryItem(item, quality)?.let { listOf(it) } ?: emptyList()
             }
         }
         return emptyList()
     }
 
-    private fun extractSingleStoryItem(item: JSONObject): MediaResult? {
-        val poster = item.optJSONObject("image_versions2")
-            ?.optJSONArray("candidates")
-            ?.optJSONObject(0)
-            ?.optString("url")
-            ?.takeIf { it.isNotBlank() }
-            ?: item.optString("display_url").takeIf { it.isNotBlank() }
-
-        item.optJSONArray("video_versions")
-            ?.optJSONObject(0)
-            ?.optString("url")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return MediaResult(it, isVideo = true, thumbnailUrl = poster) }
-
-        poster?.let { return MediaResult(it, isVideo = false, thumbnailUrl = it) }
-
-        return null
+    private fun JSONArray?.pickUrl(quality: DownloadQuality): String? {
+        val index = if (quality == DownloadQuality.DATA_SAVER) (this?.length() ?: 1) - 1 else 0
+        return this?.optJSONObject(index.coerceAtLeast(0))?.optString("url")?.takeIf { it.isNotBlank() }
     }
 
-    private fun tryPostPage(shortcode: String): List<MediaResult> {
+    private fun extractSingleStoryItem(item: JSONObject, quality: DownloadQuality): MediaResult? {
+        val poster = item.optJSONObject("image_versions2")?.optJSONArray("candidates").pickUrl(quality)
+            ?: item.optString("display_url").takeIf { it.isNotBlank() }
+
+        item.optJSONArray("video_versions").pickUrl(quality)
+            ?.let { return MediaResult(it, isVideo = true, thumbnailUrl = poster) }
+
+        return poster?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
+    }
+
+    private fun fetchProfilePicture(username: String): MediaResult {
+        val response = client.newCall(
+            Request.Builder()
+                .url("https://www.instagram.com/$username/")
+                .header("User-Agent", "Googlebot/2.1 (+http://www.google.com/bot.html)")
+                .get().build()
+        ).execute()
+
+        val html = response.body?.string()
+            ?: throw Exception("Profile HTTP ${response.code}: empty body")
+        if (!response.isSuccessful) throw Exception("Profile HTTP ${response.code}")
+
+        val picUrl = Regex("""<meta property="og:image" content="([^"]+)"""")
+            .find(html)?.groupValues?.get(1)?.replace("&amp;", "&")
+            ?: throw Exception("Could not find a profile picture for @$username — the account may not exist")
+
+        return MediaResult(picUrl, isVideo = false)
+    }
+
+    private fun extractProfileUsername(url: String): String? {
+        val m = PROFILE_REGEX.matcher(url.trim())
+        return if (m.matches()) m.group(1)?.takeUnless { it.lowercase() in RESERVED_PROFILE_PATHS } else null
+    }
+
+    fun isProfileUrl(url: String): Boolean = extractProfileUsername(url) != null
+
+    private fun tryPostPage(shortcode: String, quality: DownloadQuality): List<MediaResult> {
         val response = client.newCall(
             Request.Builder()
                 .url("https://www.instagram.com/p/$shortcode/")
@@ -209,7 +243,7 @@ object InstagramDownloader {
             .findAll(html)
             .mapNotNull { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() }
             .mapNotNull { findPublicProduct(it, expectedMediaId) }
-            .map(::extractProductMedia)
+            .map { extractProductMedia(it, quality) }
             .firstOrNull { it.isNotEmpty() }
             ?.let { return it }
         throw Exception("Post HTTP ${response.code}: no public media found")
@@ -238,13 +272,13 @@ object InstagramDownloader {
         return null
     }
 
-    private fun extractProductMedia(product: JSONObject): List<MediaResult> {
+    private fun extractProductMedia(product: JSONObject, quality: DownloadQuality): List<MediaResult> {
         product.optJSONArray("carousel_media")?.let { carousel ->
             return (0 until carousel.length()).mapNotNull { i ->
-                carousel.optJSONObject(i)?.let(::extractSingleStoryItem)
+                carousel.optJSONObject(i)?.let { extractSingleStoryItem(it, quality) }
             }
         }
-        return listOfNotNull(extractSingleStoryItem(product))
+        return listOfNotNull(extractSingleStoryItem(product, quality))
     }
 
     private fun shortcodeToMediaId(shortcode: String): String {
