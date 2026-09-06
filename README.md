@@ -59,4 +59,4 @@ If you need wiki for some reason then [WIKI](https://github.com/Orang-Studio/Ins
 
 ## License
 
-MIT License – see [LICENSE](LICENSE) for details.
+GPLv3 License – see [LICENSE](LICENSE) for details.
