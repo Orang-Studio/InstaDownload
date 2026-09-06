@@ -27,6 +27,13 @@ object InstagramDownloader {
     private val STORY_REGEX = Pattern.compile(
         "(?:instagram\\.com|instagr\\.am)/stories/([A-Za-z0-9._]+)/([0-9]+)"
     )
+    private val PROFILE_REGEX = Pattern.compile(
+        "^https?://(?:www\\.)?(?:instagram\\.com|instagr\\.am)/([A-Za-z0-9_.]+)/?(?:[?#].*)?$"
+    )
+    private val RESERVED_PROFILE_PATHS = setOf(
+        "p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct",
+        "about", "developer", "legal", "privacy", "graphql", "web", "download", "emails", "topics"
+    )
 
     private const val SHORTCODE_ALPHABET =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
@@ -69,8 +76,12 @@ object InstagramDownloader {
             return tryMediaInfoApi(story.mediaId, s, quality)
         }
 
-        val shortcode = extractShortcode(postUrl)
-            ?: throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
+        val shortcode = extractShortcode(postUrl) ?: run {
+            extractProfileUsername(postUrl)?.let { username ->
+                return listOf(fetchProfilePicture(username))
+            }
+            throw IllegalArgumentException("Invalid Instagram URL: $postUrl")
+        }
 
         val postPageError: String
         try {
@@ -147,6 +158,32 @@ object InstagramDownloader {
             ?.let { return MediaResult(it, isVideo = true, thumbnailUrl = poster) }
         return poster?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
     }
+
+    private fun fetchProfilePicture(username: String): MediaResult {
+        val response = client.newCall(
+            Request.Builder()
+                .url("https://www.instagram.com/$username/")
+                .header("User-Agent", "Googlebot/2.1 (+http://www.google.com/bot.html)")
+                .get().build()
+        ).execute()
+
+        val html = response.body?.string()
+            ?: throw Exception("Profile HTTP ${response.code}: empty body")
+        if (!response.isSuccessful) throw Exception("Profile HTTP ${response.code}")
+
+        val picUrl = Regex("""<meta property="og:image" content="([^"]+)"""")
+            .find(html)?.groupValues?.get(1)?.replace("&amp;", "&")
+            ?: throw Exception("Could not find a profile picture for @$username — the account may not exist")
+
+        return MediaResult(picUrl, isVideo = false)
+    }
+
+    private fun extractProfileUsername(url: String): String? {
+        val m = PROFILE_REGEX.matcher(url.trim())
+        return if (m.matches()) m.group(1)?.takeUnless { it.lowercase() in RESERVED_PROFILE_PATHS } else null
+    }
+
+    fun isProfileUrl(url: String): Boolean = extractProfileUsername(url) != null
 
     private fun tryPostPage(shortcode: String, quality: DownloadQuality): List<MediaResult> {
         val response = client.newCall(
