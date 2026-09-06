@@ -7,19 +7,32 @@ import androidx.security.crypto.MasterKey
 
 data class IgSession(val sessionId: String, val csrfToken: String?, val userId: String?)
 
-class SessionStore(context: Context) {
+class SessionStore(private val context: Context) {
 
-    private val prefs: SharedPreferences by lazy {
+    private val prefs: SharedPreferences by lazy { openPrefs() }
+
+    private fun openPrefs(): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        EncryptedSharedPreferences.create(
-            context,
-            "ig_session",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        return try {
+            EncryptedSharedPreferences.create(
+                context,
+                "ig_session",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            context.deleteSharedPreferences("ig_session")
+            EncryptedSharedPreferences.create(
+                context,
+                "ig_session",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        }
     }
 
     val sessionId: String?
