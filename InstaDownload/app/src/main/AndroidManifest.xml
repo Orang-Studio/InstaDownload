@@ -38,7 +38,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.InstaDownload"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
 
             <intent-filter>
