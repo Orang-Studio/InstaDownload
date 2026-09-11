@@ -74,6 +74,8 @@ class MainActivity : ComponentActivity() {
 
     private val appSettings by lazy { AppSettings(this) }
     private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
+    private val sharedUrl = mutableStateOf("")
+
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -105,6 +107,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         loggedIn.value = sessionStore.isLoggedIn
         selectedFolderName.value = appSettings.downloadFolderName
+        sharedUrl.value = handleSharedIntent(intent)
 
         setContent {
             val settings = appSettings
@@ -115,9 +118,8 @@ class MainActivity : ComponentActivity() {
                 AppTheme.DARK -> true
             }
             InstaDownloadTheme(darkTheme = useDarkTheme) {
-                val sharedUrl = handleSharedIntent(intent)
                 InstagramDownloaderScreen(
-                    initialUrl = sharedUrl,
+                    initialUrl = sharedUrl.value,
                     useDarkTheme = useDarkTheme,
                     isLoggedIn = loggedIn.value,
                     onLoginClick = { loginLauncher.launch(Intent(this, LoginActivity::class.java)) },
@@ -137,7 +139,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        recreate()
+        sharedUrl.value = handleSharedIntent(intent)
     }
 
     private fun handleSharedIntent(intent: Intent): String {
@@ -170,6 +172,12 @@ class MainActivity : ComponentActivity() {
         var deselectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
+
+        LaunchedEffect(initialUrl) {
+            if (initialUrl.isNotBlank() && initialUrl != url) {
+                url = initialUrl
+            }
+        }
 
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
