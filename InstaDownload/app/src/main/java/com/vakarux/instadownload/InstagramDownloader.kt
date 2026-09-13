@@ -7,14 +7,16 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import kotlin.math.abs
 
 data class MediaResult(
     val url: String,
     val isVideo: Boolean,
     val thumbnailUrl: String? = null,
+    val width: Int = 0,
+    val reduced: Boolean = false,
 ) {
     val previewUrl: String? get() = thumbnailUrl ?: url.takeIf { !isVideo }
 }
@@ -24,9 +26,6 @@ object InstagramDownloader {
     private val SHORTCODE_REGEX = Pattern.compile(
         "(?:instagram\\.com|instagr\\.am)/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)"
     )
-    private val STORY_REGEX = Pattern.compile(
-        "(?:instagram\\.com|instagr\\.am)/stories/([A-Za-z0-9._]+)/([0-9]+)"
-    )
     private val PROFILE_REGEX = Pattern.compile(
         "^https?://(?:www\\.)?(?:instagram\\.com|instagr\\.am)/([A-Za-z0-9_.]+)/?(?:[?#].*)?$"
     )
@@ -34,8 +33,6 @@ object InstagramDownloader {
         "p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct",
         "about", "developer", "legal", "privacy", "graphql", "web", "download", "emails", "topics"
     )
-
-    private data class StoryRequest(val username: String, val mediaId: String)
 
     private val cookieStore = mutableMapOf<String, MutableList<Cookie>>()
     private val cookieJar = object : CookieJar {
@@ -56,16 +53,10 @@ object InstagramDownloader {
         .cookieJar(cookieJar)
         .build()
 
-    private val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-    fun getMediaItems(postUrl: String, quality: DownloadQuality = DownloadQuality.BEST): List<MediaResult> {
-        extractStory(postUrl)?.let { story ->
-            return tryPublicStory(story, quality)
-        }
-
+    fun getMediaItems(postUrl: String, targetWidth: Int = Int.MAX_VALUE): List<MediaResult> {
         val shortcode = extractShortcode(postUrl) ?: run {
             extractProfileUsername(postUrl)?.let { username ->
                 return listOf(fetchProfilePicture(username))
@@ -74,7 +65,7 @@ object InstagramDownloader {
         }
 
         try {
-            return tryPostPage(shortcode, quality)
+            return tryPostPage(shortcode, targetWidth)
         } catch (postFailure: Exception) {
             throw Exception(
                 "Could not fetch this post. It may be private, age-restricted, or deleted. " +
@@ -84,120 +75,33 @@ object InstagramDownloader {
         }
     }
 
-    private fun tryPublicStory(story: StoryRequest, quality: DownloadQuality): List<MediaResult> {
-        val userId = fetchPublicUserId(story.username)
-        val reelsJson = fetchPublicReelsMedia(userId, story.mediaId, story.username)
-        val items = extractStoryMedia(reelsJson, userId, story.mediaId, quality)
-        if (items.isNotEmpty()) return items
+    private val SIZE_TOKEN = Regex("""_[ps](\d+)x\d+""")
 
-        val reelCount = JSONObject(reelsJson).optJSONObject("reels")?.length() ?: 0
-        throw UnsupportedOperationException(
-            "Instagram did not expose this story through public anonymous endpoints. " +
-                    "Resolved @${story.username} to user id $userId, but reels_media returned " +
-                    "$reelCount reel(s). Normal stories require a logged-in session or may have expired."
-        )
-    }
+    private fun JSONObject.renditionWidth(): Int = optInt("width").takeIf { it > 0 }
+        ?: SIZE_TOKEN.find(optString("url"))?.groupValues?.get(1)?.toInt() ?: Int.MAX_VALUE
 
-    private fun fetchPublicUserId(username: String): String {
-        val encodedUsername = URLEncoder.encode(username, "UTF-8")
-        val response = client.newCall(
-            Request.Builder()
-                .url("https://www.instagram.com/api/v1/users/web_profile_info/?username=$encodedUsername")
-                .header("User-Agent", DESKTOP_UA)
-                .header("Accept", "*/*")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Referer", "https://www.instagram.com/$username/")
-                .header("X-IG-App-ID", "936619743392459")
-                .header("X-ASBD-ID", "129477")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .get().build()
-        ).execute()
+    private fun JSONArray?.pick(targetWidth: Int): JSONObject? =
+        (0 until (this?.length() ?: 0)).mapNotNull { this?.optJSONObject(it) }
+            .filter { it.optString("url").isNotBlank() && !it.optString("url").contains(Regex("stp=c\\d")) }
+            .minByOrNull { abs(it.renditionWidth() - targetWidth) }
 
-        val body = response.body?.string()
-            ?: throw Exception("Profile HTTP ${response.code}: empty body")
-        if (!response.isSuccessful) {
-            throw Exception("Profile HTTP ${response.code}: ${body.take(200)}")
-        }
-
-        val user = JSONObject(body)
-            .optJSONObject("data")
-            ?.optJSONObject("user")
-            ?: throw Exception("Profile response did not include user data")
-
-        if (user.optBoolean("is_private", false)) {
-            throw UnsupportedOperationException("@$username is private")
-        }
-
-        return user.optString("id").takeIf { it.isNotBlank() }
-            ?: throw Exception("Profile response did not include user id")
-    }
-
-    private fun fetchPublicReelsMedia(userId: String, mediaId: String, username: String): String {
-        val response = client.newCall(
-            Request.Builder()
-                .url("https://www.instagram.com/api/v1/feed/reels_media/?reel_ids=$userId&media_id=$mediaId")
-                .header("User-Agent", DESKTOP_UA)
-                .header("Accept", "*/*")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Referer", "https://www.instagram.com/stories/$username/$mediaId/")
-                .header("X-IG-App-ID", "936619743392459")
-                .header("X-ASBD-ID", "129477")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .get().build()
-        ).execute()
-
-        val body = response.body?.string()
-            ?: throw Exception("Story HTTP ${response.code}: empty body")
-        if (body.trimStart().startsWith('<')) {
-            throw Exception("Story HTTP ${response.code}: got HTML instead of JSON")
-        }
-        if (!response.isSuccessful) {
-            throw Exception("Story HTTP ${response.code}: ${body.take(200)}")
-        }
-        return body
-    }
-
-    private fun extractStoryMedia(
-        reelsJson: String,
-        userId: String,
-        mediaId: String,
-        quality: DownloadQuality
-    ): List<MediaResult> {
-        val reels = JSONObject(reelsJson).optJSONObject("reels") ?: return emptyList()
-        val reel = reels.optJSONObject(userId) ?: run {
-            val keys = reels.keys()
-            var found: JSONObject? = null
-            while (keys.hasNext() && found == null) {
-                found = reels.optJSONObject(keys.next())
-            }
-            found
-        } ?: return emptyList()
-
-        val storyItems = reel.optJSONArray("items") ?: return emptyList()
-        for (i in 0 until storyItems.length()) {
-            val item = storyItems.optJSONObject(i) ?: continue
-            val id = item.optString("id")
-            val pk = item.optString("pk")
-            if (id == mediaId || id.startsWith("${mediaId}_") || pk == mediaId) {
-                return extractSingleStoryItem(item, quality)?.let { listOf(it) } ?: emptyList()
-            }
-        }
-        return emptyList()
-    }
-
-    private fun JSONArray?.pickUrl(quality: DownloadQuality): String? {
-        val index = if (quality == DownloadQuality.DATA_SAVER) (this?.length() ?: 1) - 1 else 0
-        return this?.optJSONObject(index.coerceAtLeast(0))?.optString("url")?.takeIf { it.isNotBlank() }
-    }
-
-    private fun extractSingleStoryItem(item: JSONObject, quality: DownloadQuality): MediaResult? {
-        val poster = item.optJSONObject("image_versions2")?.optJSONArray("candidates").pickUrl(quality)
+    private fun extractSingleStoryItem(item: JSONObject, targetWidth: Int): MediaResult? {
+        val images = item.optJSONObject("image_versions2")?.optJSONArray("candidates")
+        val videos = item.optJSONArray("video_versions")
+        val preview = images.pick(minOf(targetWidth, 640))?.optString("url")
             ?: item.optString("display_url").takeIf { it.isNotBlank() }
 
-        item.optJSONArray("video_versions").pickUrl(quality)
-            ?.let { return MediaResult(it, isVideo = true, thumbnailUrl = poster) }
-
-        return poster?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
+        val video = videos.pick(targetWidth)
+        val chosen = video ?: images.pick(targetWidth)
+            ?: return preview?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
+        val best = (if (video != null) videos else images).pick(Int.MAX_VALUE)?.renditionWidth() ?: 0
+        return MediaResult(
+            url = chosen.optString("url"),
+            isVideo = video != null,
+            thumbnailUrl = preview,
+            width = chosen.renditionWidth(),
+            reduced = chosen.renditionWidth() < best
+        )
     }
 
     private fun fetchProfilePicture(username: String): MediaResult {
@@ -226,7 +130,7 @@ object InstagramDownloader {
 
     fun isProfileUrl(url: String): Boolean = extractProfileUsername(url) != null
 
-    private fun tryPostPage(shortcode: String, quality: DownloadQuality): List<MediaResult> {
+    private fun tryPostPage(shortcode: String, targetWidth: Int): List<MediaResult> {
         val response = client.newCall(
             Request.Builder()
                 .url("https://www.instagram.com/p/$shortcode/")
@@ -243,7 +147,7 @@ object InstagramDownloader {
             .findAll(html)
             .mapNotNull { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() }
             .mapNotNull { findPublicProduct(it, expectedMediaId) }
-            .map { extractProductMedia(it, quality) }
+            .map { extractProductMedia(it, targetWidth) }
             .firstOrNull { it.isNotEmpty() }
             ?.let { return it }
         throw Exception("Post HTTP ${response.code}: no public media found")
@@ -272,13 +176,13 @@ object InstagramDownloader {
         return null
     }
 
-    private fun extractProductMedia(product: JSONObject, quality: DownloadQuality): List<MediaResult> {
+    private fun extractProductMedia(product: JSONObject, targetWidth: Int): List<MediaResult> {
         product.optJSONArray("carousel_media")?.let { carousel ->
             return (0 until carousel.length()).mapNotNull { i ->
-                carousel.optJSONObject(i)?.let { extractSingleStoryItem(it, quality) }
+                carousel.optJSONObject(i)?.let { extractSingleStoryItem(it, targetWidth) }
             }
         }
-        return listOfNotNull(extractSingleStoryItem(product, quality))
+        return listOfNotNull(extractSingleStoryItem(product, targetWidth))
     }
 
     private fun shortcodeToMediaId(shortcode: String): String {
@@ -316,8 +220,4 @@ object InstagramDownloader {
         return if (m.find()) m.group(1)!!.take(11) else null
     }
 
-    private fun extractStory(url: String): StoryRequest? {
-        val m = STORY_REGEX.matcher(url)
-        return if (m.find()) StoryRequest(m.group(1), m.group(2)) else null
-    }
 }

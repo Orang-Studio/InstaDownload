@@ -47,6 +47,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -87,7 +88,7 @@ class MainActivity : ComponentActivity() {
             )
         }
         val name = runCatching { DocumentsContract.getTreeDocumentId(uri).substringAfterLast(':') }
-            .getOrNull()?.takeIf { it.isNotBlank() } ?: "Selected folder"
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: getString(R.string.selected_folder_default)
         appSettings.downloadTreeUri = uri.toString()
         appSettings.downloadFolderName = name
         selectedFolderName.value = name
@@ -117,7 +118,8 @@ class MainActivity : ComponentActivity() {
                     settings = settings,
                     selectedFolderName = selectedFolderName.value,
                     onChooseFolder = { folderPickerLauncher.launch(null) },
-                    onThemeChanged = { selectedTheme = it }
+                    onThemeChanged = { selectedTheme = it },
+                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME }
                 )
             }
         }
@@ -145,7 +147,8 @@ class MainActivity : ComponentActivity() {
         settings: AppSettings = AppSettings(this),
         selectedFolderName: String = settings.downloadFolderName,
         onChooseFolder: () -> Unit = {},
-        onThemeChanged: (AppTheme) -> Unit = {}
+        onThemeChanged: (AppTheme) -> Unit = {},
+        onFolderAccessLost: () -> Unit = {}
     ) {
         var url by remember { mutableStateOf(initialUrl) }
         var isLoading by remember { mutableStateOf(false) }
@@ -180,7 +183,7 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(url) {
             val trimmed = url.trim()
-            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed)) {
+            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || isStoryUrl(trimmed)) {
                 media = null
                 return@LaunchedEffect
             }
@@ -193,12 +196,12 @@ class MainActivity : ComponentActivity() {
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(trimmed, settings.effectiveQuality())
+                    InstagramDownloader.getMediaItems(trimmed, settings.targetWidth())
                 }
             }
             isLoading = false
             if (items.isFailure) {
-                fullError = items.exceptionOrNull()?.message ?: "Something went wrong"
+                fullError = items.exceptionOrNull()?.message ?: context.getString(R.string.error_generic)
                 return@LaunchedEffect
             }
             hapticStart(context, settings.hapticsEnabled)
@@ -269,7 +272,7 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "InstaDownload",
+                    text = stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -278,7 +281,7 @@ class MainActivity : ComponentActivity() {
                 )
 
                 Text(
-                    text = "Save reels & posts to your device",
+                    text = stringResource(R.string.app_tagline),
                     style = MaterialTheme.typography.bodyLarge.copy(
                         color = Color.White.copy(alpha = 0.8f)
                     ),
@@ -299,6 +302,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
 
+                        val pasteDescription = stringResource(R.string.paste_clipboard_description)
                         OutlinedTextField(
                             value = url,
                             onValueChange = {
@@ -307,8 +311,8 @@ class MainActivity : ComponentActivity() {
                                 media = null
                                 fullError = null
                             },
-                            label = { Text("Instagram URL") },
-                            placeholder = { Text("https://www.instagram.com/reel/...") },
+                            label = { Text(stringResource(R.string.url_field_label)) },
+                            placeholder = { Text(stringResource(R.string.url_field_placeholder)) },
                             isError = urlError != null,
                             supportingText = {
                                 if (urlError != null) {
@@ -334,7 +338,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     modifier = Modifier.semantics {
-                                        contentDescription = "Paste from clipboard"
+                                        contentDescription = pasteDescription
                                     }
                                 ) {
                                     Icon(
@@ -374,15 +378,14 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
-                                        "Stories aren't supported",
+                                        stringResource(R.string.story_not_supported_title),
                                         style = MaterialTheme.typography.labelLarge.copy(
                                             color = IgOrange,
                                             fontWeight = FontWeight.Bold
                                         )
                                     )
                                     Text(
-                                        "Instagram only serves Stories to logged-in accounts, so they " +
-                                            "can't be downloaded here. Reels and posts work as usual.",
+                                        stringResource(R.string.story_not_supported_body),
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             color = colorScheme.onSurfaceVariant
                                         ),
@@ -396,9 +399,9 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 val trimmed = url.trim()
                                 when {
-                                    trimmed.isBlank() -> urlError = "Please enter a URL"
+                                    trimmed.isBlank() -> urlError = context.getString(R.string.error_empty_url)
                                     !isValidInstagramUrl(trimmed) ->
-                                        urlError = "Not a valid Instagram post or reel URL"
+                                        urlError = context.getString(R.string.error_invalid_url)
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
                                     else -> coroutineScope.launch {
@@ -407,12 +410,13 @@ class MainActivity : ComponentActivity() {
                                             isLoading = true
                                             val fetched = runCatching {
                                                 withContext(Dispatchers.IO) {
-                                                    InstagramDownloader.getMediaItems(trimmed, settings.effectiveQuality())
+                                                    InstagramDownloader.getMediaItems(trimmed, settings.targetWidth())
                                                 }
                                             }
                                             isLoading = false
                                             if (fetched.isFailure) {
-                                                fullError = fetched.exceptionOrNull()?.message ?: "Something went wrong"
+                                                fullError = fetched.exceptionOrNull()?.message
+                                                    ?: context.getString(R.string.error_generic)
                                                 return@launch
                                             }
                                             fetched.getOrThrow().also { media = it }
@@ -422,26 +426,39 @@ class MainActivity : ComponentActivity() {
                                         }
                                         hapticStart(context, settings.hapticsEnabled)
                                         isSaving = true
+                                        var fellBackToDefaultFolder = false
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
                                                 itemsToSave.forEachIndexed { i, item ->
-                                                    saveToDownloads(
-                                                        item.url, item.isVideo, i, context,
-                                                        settings.downloadTreeUri
-                                                    )
+                                                    try {
+                                                        saveToDownloads(item.url, item.isVideo, i, context, settings.downloadTreeUri)
+                                                    } catch (e: Exception) {
+                                                        if (settings.downloadTreeUri == null) throw e
+                                                        settings.downloadTreeUri = null
+                                                        settings.downloadFolderName = AppSettings.DEFAULT_FOLDER_NAME
+                                                        fellBackToDefaultFolder = true
+                                                        saveToDownloads(item.url, item.isVideo, i, context, null)
+                                                    }
                                                 }
                                             }
                                         }
                                         isSaving = false
+                                        if (fellBackToDefaultFolder) {
+                                            onFolderAccessLost()
+                                        }
                                         if (dlResult.isSuccess) {
                                             hapticComplete(context, settings.hapticsEnabled)
                                             downloadComplete = true
+                                            if (fellBackToDefaultFolder) {
+                                                fullError = context.getString(R.string.error_folder_access_lost)
+                                            }
                                             delay(2500)
                                             downloadComplete = false
                                             media = null
                                             deselectedIndices = emptySet()
                                         } else {
-                                            fullError = dlResult.exceptionOrNull()?.message ?: "Download failed"
+                                            fullError = dlResult.exceptionOrNull()?.message
+                                                ?: context.getString(R.string.error_download_failed)
                                         }
                                     }
                                 }
@@ -471,7 +488,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        "Saving…",
+                                        stringResource(R.string.saving_label),
                                         style = MaterialTheme.typography.labelLarge
                                     )
                                 }
@@ -483,7 +500,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        "Saved!",
+                                        stringResource(R.string.saved_label),
                                         style = MaterialTheme.typography.labelLarge.copy(
                                             fontWeight = FontWeight.Bold
                                         )
@@ -497,7 +514,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        "Download",
+                                        stringResource(R.string.download_label),
                                         style = MaterialTheme.typography.labelLarge.copy(
                                             fontWeight = FontWeight.Bold
                                         )
@@ -528,7 +545,10 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Text(
-                                if (items.size > 1) "${items.size} items" else "Preview",
+                                (if (items.size > 1) stringResource(R.string.items_count_format, items.size)
+                                    else stringResource(R.string.preview_label)) +
+                                    (items.firstOrNull { it.reduced }
+                                        ?.let { stringResource(R.string.data_saver_suffix_format, it.width) } ?: ""),
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = colorScheme.onSurface
@@ -576,29 +596,31 @@ class MainActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val errorLabel = stringResource(R.string.error_title)
                                 Text(
-                                    "Error",
+                                    errorLabel,
                                     style = MaterialTheme.typography.labelLarge.copy(
                                         color = colorScheme.onErrorContainer,
                                         fontWeight = FontWeight.Bold
                                     )
                                 )
                                 Row {
+                                    val copyErrorDescription = stringResource(R.string.copy_error_description)
                                     IconButton(onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("Error", fullError)
+                                        val clip = android.content.ClipData.newPlainText(errorLabel, fullError)
                                         clipboard.setPrimaryClip(clip)
                                     }) {
                                         Icon(
                                             imageVector = AppIcons.ContentCopy,
-                                            contentDescription = "Copy error",
+                                            contentDescription = copyErrorDescription,
                                             tint = colorScheme.onErrorContainer,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
                                     TextButton(onClick = { fullError = null }) {
                                         Text(
-                                            "Dismiss",
+                                            stringResource(R.string.dismiss_label),
                                             style = MaterialTheme.typography.labelMedium.copy(
                                                 color = colorScheme.onErrorContainer
                                             )
@@ -619,7 +641,7 @@ class MainActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Text(
-                                "Instagram may have changed — updating to the latest version usually fixes this.",
+                                stringResource(R.string.update_notice),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     color = colorScheme.onErrorContainer,
                                     fontWeight = FontWeight.Medium
@@ -646,7 +668,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    "Update to latest release",
+                                    stringResource(R.string.update_button),
                                     style = MaterialTheme.typography.labelLarge.copy(
                                         fontWeight = FontWeight.Bold
                                     )
@@ -678,7 +700,7 @@ class MainActivity : ComponentActivity() {
                         contentColor = Color.White
                     )
                 ) {
-                    Icon(AppIcons.Settings, contentDescription = "Settings")
+                    Icon(AppIcons.Settings, contentDescription = stringResource(R.string.settings_content_description))
                 }
             }
         }
@@ -701,7 +723,7 @@ class MainActivity : ComponentActivity() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             version?.let {
                 Text(
-                    "v$it",
+                    stringResource(R.string.version_label_format, it),
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -720,14 +742,14 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.github),
-                        contentDescription = "GitHub",
+                        contentDescription = stringResource(R.string.github_content_description),
                         tint = Color.White,
                         modifier = Modifier.size(16.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "Made by Vakarux",
+                    stringResource(R.string.made_by_label),
                     style = MaterialTheme.typography.labelLarge.copy(
                         color = Color.White.copy(alpha = 0.85f)
                     )
@@ -736,6 +758,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun SettingsDialog(
         settings: AppSettings,
@@ -745,39 +768,73 @@ class MainActivity : ComponentActivity() {
         onDismiss: () -> Unit
     ) {
         var quality by remember { mutableStateOf(settings.quality) }
+        var customWidth by remember { mutableIntStateOf(settings.customWidth) }
         var haptics by remember { mutableStateOf(settings.hapticsEnabled) }
         var theme by remember { mutableStateOf(settings.theme) }
 
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Settings") },
+            title = { Text(stringResource(R.string.settings_title)) },
             text = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    SettingsHeading("Download location")
+                    SettingsHeading(stringResource(R.string.download_location_heading))
                     Text(selectedFolderName, style = MaterialTheme.typography.bodyLarge)
                     OutlinedButton(
                         onClick = onChooseFolder,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    ) { Text("Choose folder") }
-                    SettingsHeading("Download quality")
+                    ) { Text(stringResource(R.string.choose_folder_button)) }
+                    SettingsHeading(stringResource(R.string.download_quality_heading))
                     DownloadQuality.entries.forEach { option ->
-                        SettingsRadio(option.label, option.description, quality == option) {
+                        SettingsRadio(
+                            stringResource(option.labelRes),
+                            stringResource(option.descriptionRes),
+                            quality == option
+                        ) {
                             quality = option
                             settings.quality = option
                         }
                     }
-                    SettingsHeading("Appearance")
+                    if (quality == DownloadQuality.CUSTOM) {
+                        var expanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = it },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = stringResource(R.string.resolution_px_format, customWidth),
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(stringResource(R.string.resolution_label)) },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                listOf(1080, 720, 640, 480, 320, 240).forEach { width ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.resolution_px_format, width)) },
+                                        onClick = {
+                                            customWidth = width
+                                            settings.customWidth = width
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    SettingsHeading(stringResource(R.string.appearance_heading))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Haptic feedback", style = MaterialTheme.typography.bodyLarge)
-                            Text("Vibrate for download events", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.haptic_feedback_label), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.haptic_feedback_description), style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(
                             checked = haptics,
@@ -788,7 +845,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     AppTheme.entries.forEach { option ->
-                        SettingsRadio(option.label, null, theme == option) {
+                        SettingsRadio(stringResource(option.labelRes), null, theme == option) {
                             theme = option
                             settings.theme = option
                             onThemeChanged(option)
@@ -796,7 +853,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+            confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.done_button)) } }
         )
     }
 
@@ -870,7 +927,9 @@ class MainActivity : ComponentActivity() {
                 when {
                     bmp != null -> Image(
                         bitmap = bmp,
-                        contentDescription = if (item.isVideo) "Video preview" else "Image preview",
+                        contentDescription = stringResource(
+                            if (item.isVideo) R.string.video_preview_description else R.string.image_preview_description
+                        ),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
@@ -938,10 +997,10 @@ class MainActivity : ComponentActivity() {
             )
             val fileUri = DocumentsContract.createDocument(
                 context.contentResolver, parent, mimeType, fileName
-            ) ?: throw Exception("Could not create file in the selected folder")
+            ) ?: throw Exception(context.getString(R.string.error_create_file_in_folder))
             context.contentResolver.openOutputStream(fileUri)?.use { out ->
                 InstagramDownloader.downloadToStream(mediaUrl, out)
-            } ?: throw Exception("Could not write to the selected folder")
+            } ?: throw Exception(context.getString(R.string.error_write_to_folder))
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -952,7 +1011,7 @@ class MainActivity : ComponentActivity() {
             val resolver = context.contentResolver
             val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             val uri = resolver.insert(collection, values)
-                ?: throw Exception("Could not create file in Downloads")
+                ?: throw Exception(context.getString(R.string.error_create_file_in_downloads))
             resolver.openOutputStream(uri)?.use { out ->
                 InstagramDownloader.downloadToStream(mediaUrl, out)
             }
@@ -960,11 +1019,15 @@ class MainActivity : ComponentActivity() {
             values.put(MediaStore.MediaColumns.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
         } else {
-            val dir = java.io.File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "InstaDownload"
-            ).apply { mkdirs() }
-            val file = java.io.File(dir, fileName)
-            InstagramDownloader.downloadToStream(mediaUrl, file.outputStream())
+            try {
+                val dir = java.io.File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "InstaDownload"
+                ).apply { mkdirs() }
+                val file = java.io.File(dir, fileName)
+                InstagramDownloader.downloadToStream(mediaUrl, file.outputStream())
+            } catch (e: SecurityException) {
+                throw Exception(context.getString(R.string.error_storage_permission_lost), e)
+            }
         }
     }
 

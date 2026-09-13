@@ -3,14 +3,20 @@ package com.vakarux.instadownload
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Build
+import androidx.annotation.StringRes
 
-enum class DownloadQuality(val label: String, val description: String) {
-    AUTO("Auto", "Use Data Saver quality when Android Data Saver is on"),
-    DATA_SAVER("Data Saver", "Use the smallest rendition Instagram provides"),
-    BEST("Best quality", "Use the highest-quality rendition available")
+enum class DownloadQuality(@StringRes val labelRes: Int, @StringRes val descriptionRes: Int) {
+    AUTO(R.string.quality_auto_label, R.string.quality_auto_description),
+    DATA_SAVER(R.string.quality_data_saver_label, R.string.quality_data_saver_description),
+    BEST(R.string.quality_best_label, R.string.quality_best_description),
+    CUSTOM(R.string.quality_custom_label, R.string.quality_custom_description)
 }
 
-enum class AppTheme(val label: String) { SYSTEM("System default"), LIGHT("Light"), DARK("Dark") }
+enum class AppTheme(@StringRes val labelRes: Int) {
+    SYSTEM(R.string.theme_system_label),
+    LIGHT(R.string.theme_light_label),
+    DARK(R.string.theme_dark_label)
+}
 
 class AppSettings(context: Context) {
     private val appContext = context.applicationContext
@@ -35,6 +41,16 @@ class AppSettings(context: Context) {
     var quality: DownloadQuality
         get() = enumValue(prefs.getString("quality", null), DownloadQuality.AUTO)
         set(value) = prefs.edit().putString("quality", value.name).apply()
+
+    var customWidth: Int
+        get() = prefs.getInt("custom_width", 720)
+        set(value) = prefs.edit().putInt("custom_width", value).apply()
+
+    fun targetWidth(): Int = when (effectiveQuality()) {
+        DownloadQuality.DATA_SAVER -> 0
+        DownloadQuality.CUSTOM -> customWidth
+        else -> Int.MAX_VALUE
+    }
 
     fun effectiveQuality(): DownloadQuality {
         if (quality != DownloadQuality.AUTO) return quality
