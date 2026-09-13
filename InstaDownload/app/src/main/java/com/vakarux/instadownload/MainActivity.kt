@@ -762,6 +762,14 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
+            TextButton(onClick = { uriHandler.openUri("https://github.com/Orang-Studio/InstaDownload/blob/main/PRIVACY.md") }) {
+                Text(
+                    stringResource(R.string.privacy_policy_label),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                )
+            }
         }
     }
 

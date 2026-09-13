@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.vakarux.instadownload">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Internet permission for making HTTP requests -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -12,13 +11,6 @@
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-
-    <!-- For Android 13+ (API 33+) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-
-    <!-- Post notifications permission for download notifications -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Network state permission -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

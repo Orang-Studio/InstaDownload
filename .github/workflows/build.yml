@@ -40,11 +40,21 @@ jobs:
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
+      - name: Build release AAB for Google Play
+        working-directory: InstaDownload
+        run: |
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
       - name: Prepare APK asset
         id: prepare
         run: |
           APK_NAME="InstaDownload-${GITHUB_REF_NAME#v}-main.apk"
           cp InstaDownload/app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+          cp InstaDownload/app/build/outputs/bundle/release/app-release.aab "InstaDownload-${GITHUB_REF_NAME#v}-main.aab"
           echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
           MAPPING=InstaDownload/app/build/outputs/mapping/release/mapping.txt
           if [ -f "$MAPPING" ]; then
@@ -57,6 +67,7 @@ jobs:
           name: ${{ steps.prepare.outputs.apk_name }}
           path: |
             ${{ steps.prepare.outputs.apk_name }}
+            InstaDownload-*-main.aab
             InstaDownload-*-main-mapping.txt
           retention-days: 30
 
