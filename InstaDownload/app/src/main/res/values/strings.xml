@@ -1,3 +1,76 @@
 <resources>
     <string name="app_name">InstaDownload</string>
+    <string name="app_tagline">Save reels &amp; posts to your device</string>
+
+    <string name="quality_auto_label">Auto</string>
+    <string name="quality_auto_description">Use Data Saver quality when Android Data Saver is on</string>
+    <string name="quality_data_saver_label">Data Saver</string>
+    <string name="quality_data_saver_description">Use the smallest rendition Instagram provides</string>
+    <string name="quality_best_label">Best quality</string>
+    <string name="quality_best_description">Use the highest-quality rendition available</string>
+    <string name="quality_custom_label">Custom</string>
+    <string name="quality_custom_description">Pick a custom resolution. If one isn\'t found, uses the nearest.</string>
+
+    <string name="theme_system_label">System default</string>
+    <string name="theme_light_label">Light</string>
+    <string name="theme_dark_label">Dark</string>
+
+    <string name="url_field_label">Instagram URL</string>
+    <string name="url_field_placeholder">https://www.instagram.com/reel/...</string>
+    <string name="paste_clipboard_description">Paste from clipboard</string>
+
+    <string name="story_login_title">Stories require a login</string>
+    <string name="story_login_body">Only logged-in accounts can see Stories on Instagram. You sign in here in the app, so your details never leave your device. Reels and posts download as usual, no login.</string>
+    <string name="login_to_instagram_button">Log in to Instagram</string>
+
+    <string name="account_heading">Instagram account</string>
+    <string name="status_logged_in">Status: Logged in</string>
+    <string name="status_logged_out">Status: Logged out</string>
+    <string name="log_in_button">Log in</string>
+    <string name="log_out_button">Log out</string>
+    <string name="login_required_note">Login is required for Stories and private posts.</string>
+
+    <string name="error_empty_url">Please enter a URL</string>
+    <string name="error_invalid_url">Not a valid Instagram post, reel, or story URL</string>
+    <string name="error_generic">Something went wrong</string>
+    <string name="error_download_failed">Download failed</string>
+
+    <string name="saving_label">Saving…</string>
+    <string name="saved_label">Saved!</string>
+    <string name="download_label">Download</string>
+
+    <string name="preview_label">Preview</string>
+    <string name="items_count_format">%1$d items</string>
+    <string name="data_saver_suffix_format"> · Data Saver %1$dpx</string>
+
+    <string name="error_title">Error</string>
+    <string name="copy_error_description">Copy error</string>
+    <string name="dismiss_label">Dismiss</string>
+    <string name="update_notice">Instagram may have changed. Updating to the latest version usually fixes this.</string>
+    <string name="update_button">Update to latest release</string>
+
+    <string name="settings_content_description">Settings</string>
+    <string name="video_preview_description">Video preview</string>
+    <string name="image_preview_description">Image preview</string>
+    <string name="github_content_description">GitHub</string>
+    <string name="made_by_label">Made by Vakarux</string>
+    <string name="version_label_format">v%1$s</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="download_location_heading">Download location</string>
+    <string name="choose_folder_button">Choose folder</string>
+    <string name="download_quality_heading">Download quality</string>
+    <string name="resolution_label">Resolution</string>
+    <string name="resolution_px_format">%1$dpx</string>
+    <string name="appearance_heading">Appearance</string>
+    <string name="haptic_feedback_label">Haptic feedback</string>
+    <string name="haptic_feedback_description">Vibrate for download events</string>
+    <string name="done_button">Done</string>
+
+    <string name="selected_folder_default">Selected folder</string>
+    <string name="error_create_file_in_folder">Could not create file in the selected folder</string>
+    <string name="error_write_to_folder">Could not write to the selected folder</string>
+    <string name="error_create_file_in_downloads">Could not create file in Downloads</string>
+    <string name="error_folder_access_lost">Lost access to the selected folder, downloading to the default Downloads folder instead. You can change it back in Settings.</string>
+    <string name="error_storage_permission_lost">Please grant file permission in Settings and try again.</string>
 </resources>
