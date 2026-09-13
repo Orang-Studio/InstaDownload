@@ -21,6 +21,8 @@
 
     <string name="story_login_title">Stories require a login</string>
     <string name="story_login_body">Only logged-in accounts can see Stories on Instagram. You sign in here in the app, so your details never leave your device. Reels and posts download as usual, no login.</string>
+    <string name="login_title">Logging in</string>
+    <string name="cancel">Cancel</string>
     <string name="login_to_instagram_button">Log in to Instagram</string>
 
     <string name="account_heading">Instagram account</string>

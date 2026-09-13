@@ -59,7 +59,8 @@
             android:name=".LoginActivity"
             android:exported="false"
             android:theme="@style/Theme.InstaDownload"
-            android:label="Instagram login" />
+            android:label="@string/login_title"
+            android:windowSoftInputMode="adjustNothing" />
     </application>
 
 </manifest>

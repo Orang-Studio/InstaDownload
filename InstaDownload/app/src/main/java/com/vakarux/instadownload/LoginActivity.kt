@@ -5,12 +5,23 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.res.stringResource
+import com.vakarux.instadownload.ui.AppIcons
 
 class LoginActivity : ComponentActivity() {
 
     private lateinit var sessionStore: SessionStore
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Suppress("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,7 +50,31 @@ class LoginActivity : ComponentActivity() {
             loadUrl("https://www.instagram.com/accounts/login/")
         }
 
-        setContentView(webView)
+        val darkTheme = when (AppSettings(this).theme) {
+            AppTheme.SYSTEM -> isSystemInDarkTheme()
+            AppTheme.LIGHT -> false
+            AppTheme.DARK -> true
+        }
+        val topBar = ComposeView(this).apply {
+            setContent {
+                InstaDownloadTheme(darkTheme = darkTheme) {
+                    TopAppBar(
+                        title = { Text(stringResource(R.string.login_title)) },
+                        navigationIcon = {
+                            IconButton(onClick = { finish() }) {
+                                Icon(AppIcons.Close, contentDescription = stringResource(R.string.cancel))
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(topBar)
+            addView(webView)
+        })
     }
 
     private fun captureSessionIfPresent() {
