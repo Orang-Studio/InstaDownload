@@ -1,0 +1,1 @@
+Target Android 16, drop unused media/notification permissions, add privacy policy.
