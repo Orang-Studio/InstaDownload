@@ -50,13 +50,14 @@ class LoginActivity : ComponentActivity() {
             loadUrl("https://www.instagram.com/accounts/login/")
         }
 
-        val darkTheme = when (AppSettings(this).theme) {
-            AppTheme.SYSTEM -> isSystemInDarkTheme()
-            AppTheme.LIGHT -> false
-            AppTheme.DARK -> true
-        }
+        val theme = AppSettings(this).theme
         val topBar = ComposeView(this).apply {
             setContent {
+                val darkTheme = when (theme) {
+                    AppTheme.SYSTEM -> isSystemInDarkTheme()
+                    AppTheme.LIGHT -> false
+                    AppTheme.DARK -> true
+                }
                 InstaDownloadTheme(darkTheme = darkTheme) {
                     TopAppBar(
                         title = { Text(stringResource(R.string.login_title)) },
