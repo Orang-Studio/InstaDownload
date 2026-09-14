@@ -28,6 +28,9 @@ jobs:
       - name: Decode signing keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > InstaDownload/app/release.jks
 
+      - name: Print signing cert fingerprint
+        run: keytool -list -v -keystore InstaDownload/app/release.jks -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -alias "${{ secrets.KEY_ALIAS }}" | grep SHA256
+
       - name: Build release APK
         working-directory: InstaDownload
         run: |
@@ -80,6 +83,9 @@ jobs:
 
       - name: Decode signing keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > InstaDownload/app/release.jks
+
+      - name: Print signing cert fingerprint
+        run: keytool -list -v -keystore InstaDownload/app/release.jks -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -alias "${{ secrets.KEY_ALIAS }}" | grep SHA256
 
       - name: Build release APK
         working-directory: InstaDownload
