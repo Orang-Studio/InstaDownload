@@ -1,0 +1,49 @@
+name: Verify Play ownership
+
+on:
+  workflow_dispatch:
+    inputs:
+      snippet:
+        description: 'ADI registration snippet from Play Console'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x InstaDownload/gradlew
+
+      - name: Add ADI registration snippet
+        run: |
+          mkdir -p InstaDownload/app/src/main/assets
+          printf '%s' "${{ inputs.snippet }}" > InstaDownload/app/src/main/assets/adi-registration.properties
+
+      - name: Decode signing keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > InstaDownload/app/release.jks
+
+      - name: Build release APK
+        working-directory: InstaDownload
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-ownership-verification
+          path: InstaDownload/app/build/outputs/apk/release/app-release.apk
+          retention-days: 1
