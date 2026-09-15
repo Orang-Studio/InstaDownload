@@ -14,6 +14,8 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.text.format.DateUtils
+import android.text.format.Formatter
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -60,6 +62,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.regex.Pattern
+import kotlin.math.roundToLong
 
 // Instagram brand gradient colors
 private val IgPurple = Color(0xFF833AB4)
@@ -159,6 +162,7 @@ class MainActivity : ComponentActivity() {
         var deselectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
+        var targetWidth by remember { mutableIntStateOf(settings.targetWidth()) }
 
         LaunchedEffect(initialUrl) {
             if (initialUrl.isNotBlank() && initialUrl != url) {
@@ -181,7 +185,7 @@ class MainActivity : ComponentActivity() {
             }
         )
 
-        LaunchedEffect(url) {
+        LaunchedEffect(url, targetWidth) {
             val trimmed = url.trim()
             if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || isStoryUrl(trimmed)) {
                 media = null
@@ -196,7 +200,7 @@ class MainActivity : ComponentActivity() {
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(trimmed, settings.targetWidth())
+                    InstagramDownloader.getMediaItems(trimmed, targetWidth)
                 }
             }
             isLoading = false
@@ -214,7 +218,10 @@ class MainActivity : ComponentActivity() {
                 selectedFolderName = selectedFolderName,
                 onChooseFolder = onChooseFolder,
                 onThemeChanged = onThemeChanged,
-                onDismiss = { showSettings = false }
+                onDismiss = {
+                    showSettings = false
+                    targetWidth = settings.targetWidth()
+                }
             )
         }
 
@@ -912,7 +919,19 @@ class MainActivity : ComponentActivity() {
             if (bmp == null) loadFailed = true
             value = bmp
         }
+        val context = LocalContext.current
+        val sizeBytes by produceState(-1L, item.url) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { InstagramDownloader.contentLength(item.url) }.getOrDefault(-1L)
+            }
+        }
+        val meta = listOfNotNull(
+            item.takeIf { it.width in 1 until Int.MAX_VALUE && it.height > 0 }?.let { "${it.width}×${it.height}" },
+            item.durationSec.takeIf { it > 0 }?.let { DateUtils.formatElapsedTime(it.roundToLong()) },
+            sizeBytes.takeIf { it > 0 }?.let { Formatter.formatShortFileSize(context, it) }
+        )
 
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(modifier = Modifier.size(width = 120.dp, height = 158.dp)) {
             Box(
                 modifier = Modifier
@@ -974,6 +993,17 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.align(Alignment.TopEnd)
                 )
             }
+        }
+        if (meta.isNotEmpty()) {
+            Text(
+                meta.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                modifier = Modifier.width(120.dp).padding(top = 4.dp)
+            )
+        }
         }
     }
 

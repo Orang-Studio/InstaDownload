@@ -16,6 +16,8 @@ data class MediaResult(
     val isVideo: Boolean,
     val thumbnailUrl: String? = null,
     val width: Int = 0,
+    val height: Int = 0,
+    val durationSec: Double = 0.0,
     val reduced: Boolean = false,
 ) {
     val previewUrl: String? get() = thumbnailUrl ?: url.takeIf { !isVideo }
@@ -75,10 +77,13 @@ object InstagramDownloader {
         }
     }
 
-    private val SIZE_TOKEN = Regex("""_[ps](\d+)x\d+""")
+    private val SIZE_TOKEN = Regex("""_[ps](\d+)x(\d+)""")
 
     private fun JSONObject.renditionWidth(): Int = optInt("width").takeIf { it > 0 }
         ?: SIZE_TOKEN.find(optString("url"))?.groupValues?.get(1)?.toInt() ?: Int.MAX_VALUE
+
+    private fun JSONObject.renditionHeight(): Int = optInt("height").takeIf { it > 0 }
+        ?: SIZE_TOKEN.find(optString("url"))?.groupValues?.get(2)?.toInt() ?: 0
 
     private fun JSONArray?.pick(targetWidth: Int): JSONObject? =
         (0 until (this?.length() ?: 0)).mapNotNull { this?.optJSONObject(it) }
@@ -91,15 +96,20 @@ object InstagramDownloader {
         val preview = images.pick(minOf(targetWidth, 640))?.optString("url")
             ?: item.optString("display_url").takeIf { it.isNotBlank() }
 
+        android.util.Log.d("IGDBG", "keys=" + item.keys().asSequence().joinToString() + " vid0=" + videos?.optJSONObject(0) + " img0=" + images?.optJSONObject(0))
         val video = videos.pick(targetWidth)
         val chosen = video ?: images.pick(targetWidth)
             ?: return preview?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
         val best = (if (video != null) videos else images).pick(Int.MAX_VALUE)?.renditionWidth() ?: 0
+        val width = chosen.renditionWidth().takeIf { it < Int.MAX_VALUE } ?: item.optInt("original_width")
+        val height = chosen.renditionHeight().takeIf { it > 0 } ?: item.optInt("original_height")
         return MediaResult(
             url = chosen.optString("url"),
             isVideo = video != null,
             thumbnailUrl = preview,
-            width = chosen.renditionWidth(),
+            width = width,
+            height = height,
+            durationSec = item.optDouble("video_duration", 0.0),
             reduced = chosen.renditionWidth() < best
         )
     }
@@ -208,6 +218,11 @@ object InstagramDownloader {
         response.body?.byteStream()?.copyTo(out)
             ?: throw Exception("Empty download body")
     }
+
+    fun contentLength(url: String): Long =
+        client.newCall(mediaRequest(url).newBuilder().head().build()).execute().use {
+            it.header("Content-Length")?.toLongOrNull() ?: -1L
+        }
 
     fun fetchBytes(url: String): ByteArray {
         val response = client.newCall(mediaRequest(url)).execute()
