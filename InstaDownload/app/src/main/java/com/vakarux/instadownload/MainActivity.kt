@@ -1068,8 +1068,8 @@ class MainActivity : ComponentActivity() {
 
     private fun isStoryUrl(url: String): Boolean =
         Pattern.compile(
-            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+/?.*"
-        ).matcher(url).matches()
+            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+"
+        ).matcher(url).find()
 
     private fun checkPermissions(): Boolean =
         ContextCompat.checkSelfPermission(
