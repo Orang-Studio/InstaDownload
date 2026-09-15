@@ -38,6 +38,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 - No third-party download service.
 - No Instagram login required for public content.
 - Fully open source under the GPLv3 License.
+- Works on Android 17!
 
 > [!IMPORTANT]
 > The **Stories version** requires you to log in to Instagram. Only download it from the official [InstaDownload releases page](https://github.com/Orang-Studio/InstaDownload/releases).
@@ -67,6 +68,7 @@ InstaDownload supports public links containing:
 - `instagram.com/p/`
 - `instagram.com/reel/`
 - `instagram.com/tv/`
+`tv is deprecated link type`
 
 The Stories version additionally supports Instagram Stories and private posts your account has permission to view.
 
