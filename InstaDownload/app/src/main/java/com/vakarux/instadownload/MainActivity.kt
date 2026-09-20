@@ -78,7 +78,8 @@ class MainActivity : ComponentActivity() {
 
     private val appSettings by lazy { AppSettings(this) }
     private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
-    private val sharedUrl = mutableStateOf("")
+    private class SharedUrl(val url: String)
+    private val sharedUrl = mutableStateOf(SharedUrl(""))
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -104,7 +105,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         selectedFolderName.value = appSettings.downloadFolderName
-        sharedUrl.value = handleSharedIntent(intent)
+        sharedUrl.value = SharedUrl(handleSharedIntent(intent))
 
         setContent {
             val settings = appSettings
@@ -116,7 +117,8 @@ class MainActivity : ComponentActivity() {
             }
             InstaDownloadTheme(darkTheme = useDarkTheme) {
                 InstagramDownloaderScreen(
-                    initialUrl = sharedUrl.value,
+                    initialUrl = sharedUrl.value.url,
+                    initialUrlKey = sharedUrl.value,
                     useDarkTheme = useDarkTheme,
                     settings = settings,
                     selectedFolderName = selectedFolderName.value,
@@ -131,7 +133,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        sharedUrl.value = handleSharedIntent(intent)
+        sharedUrl.value = SharedUrl(handleSharedIntent(intent))
     }
 
     private fun handleSharedIntent(intent: Intent): String {
@@ -146,6 +148,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun InstagramDownloaderScreen(
         initialUrl: String = "",
+        initialUrlKey: Any = initialUrl,
         useDarkTheme: Boolean = isSystemInDarkMode(),
         settings: AppSettings = AppSettings(this),
         selectedFolderName: String = settings.downloadFolderName,
@@ -164,9 +167,13 @@ class MainActivity : ComponentActivity() {
         var showSettings by remember { mutableStateOf(false) }
         var targetWidth by remember { mutableIntStateOf(settings.targetWidth()) }
 
-        LaunchedEffect(initialUrl) {
-            if (initialUrl.isNotBlank() && initialUrl != url) {
+        LaunchedEffect(initialUrlKey) {
+            if (initialUrl.isNotBlank()) {
                 url = initialUrl
+                media = null
+                urlError = null
+                fullError = null
+                downloadComplete = false
             }
         }
 
