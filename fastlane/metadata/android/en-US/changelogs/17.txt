@@ -1,0 +1,1 @@
+Fix shared links not loading when the app is already open.
