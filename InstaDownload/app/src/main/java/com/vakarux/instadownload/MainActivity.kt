@@ -75,7 +75,8 @@ class MainActivity : ComponentActivity() {
 
     private val appSettings by lazy { AppSettings(this) }
     private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
-    private val sharedUrl = mutableStateOf("")
+    private class SharedUrl(val url: String)
+    private val sharedUrl = mutableStateOf(SharedUrl(""))
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -108,7 +109,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         loggedIn.value = sessionStore.isLoggedIn
         selectedFolderName.value = appSettings.downloadFolderName
-        sharedUrl.value = handleSharedIntent(intent)
+        sharedUrl.value = SharedUrl(handleSharedIntent(intent))
 
         setContent {
             val settings = appSettings
@@ -120,7 +121,8 @@ class MainActivity : ComponentActivity() {
             }
             InstaDownloadTheme(darkTheme = useDarkTheme) {
                 InstagramDownloaderScreen(
-                    initialUrl = sharedUrl.value,
+                    initialUrl = sharedUrl.value.url,
+                    initialUrlKey = sharedUrl.value,
                     useDarkTheme = useDarkTheme,
                     isLoggedIn = loggedIn.value,
                     onLoginClick = { loginLauncher.launch(Intent(this, LoginActivity::class.java)) },
@@ -141,7 +143,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        sharedUrl.value = handleSharedIntent(intent)
+        sharedUrl.value = SharedUrl(handleSharedIntent(intent))
     }
 
     private fun handleSharedIntent(intent: Intent): String {
@@ -156,6 +158,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun InstagramDownloaderScreen(
         initialUrl: String = "",
+        initialUrlKey: Any = initialUrl,
         useDarkTheme: Boolean = isSystemInDarkMode(),
         isLoggedIn: Boolean = false,
         onLoginClick: () -> Unit = {},
@@ -176,9 +179,13 @@ class MainActivity : ComponentActivity() {
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
-        LaunchedEffect(initialUrl) {
-            if (initialUrl.isNotBlank() && initialUrl != url) {
+        LaunchedEffect(initialUrlKey) {
+            if (initialUrl.isNotBlank()) {
                 url = initialUrl
+                media = null
+                urlError = null
+                fullError = null
+                downloadComplete = false
             }
         }
 
