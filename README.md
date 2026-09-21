@@ -53,7 +53,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 ## Speed comparison
 
 <p align="center">
-  <img src="img/speed_comparison.gif" width="500" alt="InstaDownload vs InSaver download speed comparison"><br>
+  <img src="img/speed_comparison.gif" width="400" alt="InstaDownload vs InSaver download speed comparison"><br>
   <sub>InstaDownload: 6.70s &nbsp;·&nbsp; InSaver: 35.27s</sub>
 </p>
 
