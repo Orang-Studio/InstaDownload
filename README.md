@@ -50,6 +50,12 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
   <img src="img/darktheme.png" width="250" alt="InstaDownload dark theme">
 </p>
 
+## Speed comparison
+
+<p align="center">
+  <img src="img/speed_comparison.gif" width="500" alt="InstaDownload vs InSaver download speed comparison">
+</p>
+
 ## Usage
 
 1. Copy the URL of an Instagram post, reel, or video.
