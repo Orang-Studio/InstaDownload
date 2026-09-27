@@ -41,7 +41,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 - Works on Android 17!
 
 > [!IMPORTANT]
-> The **Stories version, NOT MAIN VERSION** requires you to log in to Instagram (OPTIONAL). Only download it from the official [InstaDownload releases page](https://github.com/Orang-Studio/InstaDownload/releases).
+> The **Stories version, NOT MAIN VERSION** requires you to log in to Instagram (OPTIONAL FOR REELS). Only download it from the official [InstaDownload releases page](https://github.com/Orang-Studio/InstaDownload/releases).
 
 ## Screenshots
 
