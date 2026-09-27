@@ -34,9 +34,9 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 - Download Instagram photos, reels, and videos.
 - Download every photo or video from carousel posts.
 - Paste a link and save the media directly to your device.
-- No ads, analytics, or tracking.
+- **No ads**, analytics, or tracking.
 - No third-party download service.
-- No Instagram login required for public content.
+- **No Instagram login** required for public content.
 - Fully open source under the GPLv3 License.
 - Works on Android 17!
 
