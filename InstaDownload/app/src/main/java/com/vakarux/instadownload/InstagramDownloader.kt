@@ -11,6 +11,14 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import kotlin.math.abs
 
+data class PostMeta(
+    val username: String?,
+    val caption: String?,
+    val url: String,
+    val song: String?,
+    val takenAtSec: Long,
+)
+
 data class MediaResult(
     val url: String,
     val isVideo: Boolean,
@@ -19,6 +27,8 @@ data class MediaResult(
     val height: Int = 0,
     val durationSec: Double = 0.0,
     val reduced: Boolean = false,
+    val baseName: String = "",
+    val meta: PostMeta? = null,
 ) {
     val previewUrl: String? get() = thumbnailUrl ?: url.takeIf { !isVideo }
 }
@@ -130,7 +140,10 @@ object InstagramDownloader {
             .find(html)?.groupValues?.get(1)?.replace("&amp;", "&")
             ?: throw Exception("Could not find a profile picture for @$username — the account may not exist")
 
-        return MediaResult(picUrl, isVideo = false)
+        return MediaResult(
+            picUrl, isVideo = false, baseName = "${username}_profile",
+            meta = PostMeta(username, null, "https://www.instagram.com/$username/", null, 0L)
+        )
     }
 
     private fun extractProfileUsername(url: String): String? {
@@ -157,7 +170,7 @@ object InstagramDownloader {
             .findAll(html)
             .mapNotNull { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() }
             .mapNotNull { findPublicProduct(it, expectedMediaId) }
-            .map { extractProductMedia(it, targetWidth) }
+            .map { extractProductMedia(it, targetWidth, postBaseName(it, shortcode), postMeta(it, shortcode)) }
             .firstOrNull { it.isNotEmpty() }
             ?.let { return it }
         throw Exception("Post HTTP ${response.code}: no public media found")
@@ -186,13 +199,40 @@ object InstagramDownloader {
         return null
     }
 
-    private fun extractProductMedia(product: JSONObject, targetWidth: Int): List<MediaResult> {
+    private fun postUsername(product: JSONObject): String? =
+        (product.optJSONObject("user") ?: product.optJSONObject("owner"))
+            ?.optString("username")?.takeIf { it.isNotBlank() }
+
+    private fun postBaseName(product: JSONObject, shortcode: String): String {
+        val desc = product.optJSONObject("caption")?.optString("text").orEmpty()
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim().take(30).trim().replace(' ', '_')
+        return listOfNotNull(postUsername(product), desc.ifBlank { null }, if (desc.isBlank()) shortcode else shortcode.take(3))
+            .joinToString("_")
+    }
+
+    private fun postMeta(product: JSONObject, shortcode: String): PostMeta {
+        val clips = product.optJSONObject("clips_metadata")
+        val licensed = clips?.optJSONObject("music_info")?.optJSONObject("music_asset_info")
+            ?.let { listOf(it.optString("display_artist"), it.optString("title")) }
+        val original = clips?.optJSONObject("original_sound_info")
+            ?.let { listOf(it.optJSONObject("ig_artist")?.optString("username").orEmpty(), it.optString("original_audio_title")) }
+        return PostMeta(
+            username = postUsername(product),
+            caption = product.optJSONObject("caption")?.optString("text")?.takeIf { it.isNotBlank() },
+            url = "https://www.instagram.com/p/$shortcode/",
+            song = (licensed ?: original)?.filter { it.isNotBlank() }?.joinToString(" - ")?.takeIf { it.isNotBlank() },
+            takenAtSec = product.optLong("taken_at"),
+        )
+    }
+
+    private fun extractProductMedia(product: JSONObject, targetWidth: Int, baseName: String, meta: PostMeta): List<MediaResult> {
         product.optJSONArray("carousel_media")?.let { carousel ->
             return (0 until carousel.length()).mapNotNull { i ->
                 carousel.optJSONObject(i)?.let { extractSingleStoryItem(it, targetWidth) }
+                    ?.copy(baseName = "${baseName}_${i + 1}", meta = meta)
             }
         }
-        return listOfNotNull(extractSingleStoryItem(product, targetWidth))
+        return listOfNotNull(extractSingleStoryItem(product, targetWidth)?.copy(baseName = baseName, meta = meta))
     }
 
     private fun shortcodeToMediaId(shortcode: String): String {
