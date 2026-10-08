@@ -43,10 +43,10 @@ class QuickDownloadService : Service() {
             val result = runCatching { download(url) }
             withContext(Dispatchers.Main) {
                 val notification = result.fold(
-                    onSuccess = { outcome ->
+                    onSuccess = { usedDefaultFolder ->
                         buildNotification(
                             title = getString(R.string.quick_download_complete_title),
-                            text = if (outcome.usedDefaultFolder) {
+                            text = if (usedDefaultFolder) {
                                 getString(R.string.quick_download_complete_fallback)
                             } else {
                                 getString(R.string.quick_download_complete_text)
@@ -76,24 +76,11 @@ class QuickDownloadService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun download(url: String): DownloadOutcome {
+    private fun download(url: String): Boolean {
         val settings = AppSettings(this)
         val items = InstagramDownloader.getMediaItems(url, settings.targetWidth())
         if (items.isEmpty()) throw Exception(getString(R.string.error_download_failed))
-
-        var usedDefaultFolder = false
-        items.forEach { item ->
-            try {
-                saveToDownloads(item, this, settings.downloadTreeUri)
-            } catch (error: Exception) {
-                if (settings.downloadTreeUri == null) throw error
-                settings.downloadTreeUri = null
-                settings.downloadFolderName = AppSettings.DEFAULT_FOLDER_NAME
-                usedDefaultFolder = true
-                saveToDownloads(item, this, null)
-            }
-        }
-        return DownloadOutcome(usedDefaultFolder)
+        return items.map { saveToDownloads(it, this, settings) }.any { it }
     }
 
     private fun createNotificationChannel() {
@@ -138,8 +125,6 @@ class QuickDownloadService : Service() {
         serviceScope.cancel()
         super.onDestroy()
     }
-
-    private data class DownloadOutcome(val usedDefaultFolder: Boolean)
 
     companion object {
         const val ACTION_DOWNLOAD = "com.vakarux.instadownload.action.QUICK_DOWNLOAD"

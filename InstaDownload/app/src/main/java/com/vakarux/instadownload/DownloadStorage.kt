@@ -9,7 +9,20 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 
-internal fun saveToDownloads(
+internal fun saveToDownloads(item: MediaResult, context: Context, settings: AppSettings): Boolean {
+    try {
+        saveTo(item, context, settings.downloadTreeUri)
+        return false
+    } catch (e: Exception) {
+        if (settings.downloadTreeUri == null) throw e
+        settings.downloadTreeUri = null
+        settings.downloadFolderName = AppSettings.DEFAULT_FOLDER_NAME
+        saveTo(item, context, null)
+        return true
+    }
+}
+
+private fun saveTo(
     item: MediaResult,
     context: Context,
     downloadTreeUri: String?

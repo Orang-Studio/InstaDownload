@@ -441,14 +441,8 @@ class MainActivity : ComponentActivity() {
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
                                                 itemsToSave.forEach { item ->
-                                                    try {
-                                                        saveToDownloads(item, context, settings.downloadTreeUri)
-                                                    } catch (e: Exception) {
-                                                        if (settings.downloadTreeUri == null) throw e
-                                                        settings.downloadTreeUri = null
-                                                        settings.downloadFolderName = AppSettings.DEFAULT_FOLDER_NAME
+                                                    if (saveToDownloads(item, context, settings)) {
                                                         fellBackToDefaultFolder = true
-                                                        saveToDownloads(item, context, null)
                                                     }
                                                 }
                                             }
