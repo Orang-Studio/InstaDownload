@@ -56,7 +56,7 @@
     <string name="video_preview_description">Video preview</string>
     <string name="image_preview_description">Image preview</string>
     <string name="github_content_description">GitHub</string>
-    <string name="made_by_label">Made by Vakarux</string>
+    <string name="made_by_label">Open Source on GitHub</string>
     <string name="version_label_format">v%1$s</string>
     <string name="privacy_policy_label">Privacy policy</string>
 
