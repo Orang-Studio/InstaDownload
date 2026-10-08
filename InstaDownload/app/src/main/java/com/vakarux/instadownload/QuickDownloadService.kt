@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 class QuickDownloadService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var active = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -27,10 +28,11 @@ class QuickDownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val url = intent?.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
-            stopSelf(startId)
+            if (active == 0) stopSelf()
             return START_NOT_STICKY
         }
 
+        active++
         startForeground(NOTIFICATION_ID, buildNotification(
             title = getString(R.string.quick_download_in_progress_title),
             text = getString(R.string.quick_download_in_progress_text),
@@ -60,12 +62,14 @@ class QuickDownloadService : Service() {
                         )
                     }
                 )
-                stopForeground(STOP_FOREGROUND_REMOVE)
                 runCatching {
                     getSystemService(NotificationManager::class.java)
-                        .notify(NOTIFICATION_ID, notification)
+                        .notify(startId, notification)
                 }
-                stopSelf(startId)
+                if (--active == 0) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
 
