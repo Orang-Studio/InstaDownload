@@ -85,19 +85,27 @@ class QuickDownloadService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val progress = NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.quick_download_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = getString(R.string.quick_download_channel_description)
             }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            val results = NotificationChannel(
+                RESULT_CHANNEL_ID,
+                getString(R.string.quick_download_results_channel_name),
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = getString(R.string.quick_download_results_channel_description)
+            }
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannels(listOf(progress, results))
         }
     }
 
     private fun buildNotification(title: String, text: String, ongoing: Boolean) =
-        NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder(this, if (ongoing) CHANNEL_ID else RESULT_CHANNEL_ID)
             .setSmallIcon(R.drawable.download)
             .setContentTitle(title)
             .setContentText(text)
@@ -105,6 +113,7 @@ class QuickDownloadService : Service() {
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
             .setOnlyAlertOnce(true)
+            .setPriority(if (ongoing) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
             .apply {
                 if (ongoing) setProgress(0, 0, true)
             }
@@ -131,6 +140,7 @@ class QuickDownloadService : Service() {
         const val EXTRA_URL = "com.vakarux.instadownload.extra.URL"
 
         private const val CHANNEL_ID = "quick_downloads"
+        private const val RESULT_CHANNEL_ID = "quick_download_results"
         private const val NOTIFICATION_ID = 2001
     }
 }
