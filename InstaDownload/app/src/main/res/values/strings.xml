@@ -1,6 +1,15 @@
 <resources>
     <string name="app_name">InstaDownload</string>
     <string name="app_tagline">Save reels &amp; posts to your device</string>
+    <string name="quick_download_label">Quick download</string>
+    <string name="quick_download_channel_name">Quick downloads</string>
+    <string name="quick_download_channel_description">Downloads started from the share menu</string>
+    <string name="quick_download_in_progress_title">Downloading from Instagram</string>
+    <string name="quick_download_in_progress_text">Saving in the background</string>
+    <string name="quick_download_complete_title">Instagram download complete</string>
+    <string name="quick_download_complete_text">Saved to InstaDownload</string>
+    <string name="quick_download_complete_fallback">Saved to the default Downloads folder</string>
+    <string name="quick_download_failed_title">Instagram download failed</string>
 
     <string name="quality_auto_label">Auto</string>
     <string name="quality_auto_description">Use Data Saver quality when Android Data Saver is on</string>
