@@ -3,12 +3,14 @@ name: PR check
 on:
   pull_request:
     branches: [ main, master ]
+  push:
 
 permissions:
   contents: read
 
 jobs:
   build:
+    if: github.event_name == 'pull_request' || github.repository != 'Orang-Studio/InstaDownload'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
