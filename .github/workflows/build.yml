@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    if: github.repository == 'Orang-Studio/InstaDownload'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -71,9 +72,65 @@ jobs:
             InstaDownload-*-main-mapping.txt
           retention-days: 30
 
+  build-stories:
+    if: github.repository == 'Orang-Studio/InstaDownload' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      apk_name: ${{ steps.prepare.outputs.apk_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stories
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x InstaDownload/gradlew
+
+      - name: Decode signing keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > InstaDownload/app/release.jks
+
+      - name: Print signing cert fingerprint
+        run: keytool -list -v -keystore InstaDownload/app/release.jks -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -alias "${{ secrets.KEY_ALIAS }}" | grep SHA256
+
+      - name: Build release APK
+        working-directory: InstaDownload
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: Prepare APK asset
+        id: prepare
+        run: |
+          APK_NAME="InstaDownload-${GITHUB_REF_NAME#v}-stories.apk"
+          cp InstaDownload/app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          MAPPING=InstaDownload/app/build/outputs/mapping/release/mapping.txt
+          if [ -f "$MAPPING" ]; then
+            cp "$MAPPING" "InstaDownload-${GITHUB_REF_NAME#v}-stories-mapping.txt"
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare.outputs.apk_name }}
+          path: |
+            ${{ steps.prepare.outputs.apk_name }}
+            InstaDownload-*-stories-mapping.txt
+          retention-days: 30
+
   release:
-    needs: [ build ]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ build, build-stories ]
+    if: github.repository == 'Orang-Studio/InstaDownload' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
