@@ -13,7 +13,7 @@ android {
         minSdk = 24  // Android 7.0 (Nougat)
         targetSdk = 36
         versionCode = 19
-        versionName = "2.7.3"
+        versionName = "2.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
