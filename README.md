@@ -34,6 +34,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 - Download Instagram photos, reels, and videos.
 - Download every photo or video from carousel posts.
 - Paste a link and save the media directly to your device.
+- Quick download by sharing to the app without opening it.
 - **No ads**, analytics, or tracking.
 - No third-party download service.
 - **No Instagram login** required for public content.
@@ -59,11 +60,20 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 
 ## Usage
 
+Method 1:
+1. Press Share in Instagragram
+2. Find InstaDownload in the list
+3. Choose either to open the app or to use Quick share
+4. Press download (skip if quick share is chosen)
+
+Method 2:
 1. Copy the URL of an Instagram post, reel, or video.
 2. Open **InstaDownload**.
 3. Paste the URL.
 4. Tap **Download**.
 5. Find the downloaded media in your device's `Downloads` folder.
+
+
 
 <details>
 <summary><strong>Supported Instagram links</strong></summary>
@@ -147,6 +157,6 @@ For bugs or feature requests, use [GitHub Issues](https://github.com/Orang-Studi
 
 ## Info
 - Platform: Android; IOS
-- Official Source Stores: Github; Fdroid; Gplay
+- Official Source Stores: Github; Fdroid; Gplay (SOON)
 - InstaDownload is available under the [GPLv3 License](LICENSE)
 - Made by human and AI for API reverse engineering 🧡
