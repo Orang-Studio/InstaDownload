@@ -5,7 +5,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 **No login, ads, tracking for public content. Fully open source.**
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=com.vakarux.instadownload">
-    <img src="img/badge_gplay.png" alt="Get InstaDownload on Gplay" height="80">
+    <img src="img/badge_gplay2.png" alt="Get InstaDownload on Gplay" height="80">
   &nbsp;
   <a href="https://f-droid.org/packages/com.vakarux.instadownload">
     <img src="img/badge_fdroid.png" alt="Get InstaDownload on F-Droid" height="80">
