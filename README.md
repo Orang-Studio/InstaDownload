@@ -63,7 +63,7 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 ## Usage
 
 Method 1:
-1. Press Share in Instagragram
+1. Press Share in Instagram
 2. Find InstaDownload in the list
 3. Choose either to open the app or to use Quick share
 4. Press download (skip if quick share is chosen)
