@@ -90,6 +90,8 @@
     <string name="library_empty_body">Videos and photos you download appear here.</string>
     <string name="library_unknown_account">Unknown account</string>
     <string name="library_no_caption">No caption</string>
+    <string name="library_caption_clip_label">Instagram caption</string>
+    <string name="library_caption_copied">Caption copied</string>
     <string name="library_no_link">Post link unavailable</string>
     <string name="library_open_post">Open post</string>
     <string name="library_song_format">♪ %1$s</string>

@@ -1,9 +1,13 @@
 package com.vakarux.instadownload
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -25,9 +29,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
@@ -264,6 +270,7 @@ private fun DownloadRow(
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
     val uriHandler = LocalUriHandler.current
+    val haptics = LocalHapticFeedback.current
     var captionExpanded by remember(record.uri) { mutableStateOf(false) }
 
     val sizeBytes by produceState(-1L, record.uri) {
@@ -338,9 +345,15 @@ private fun DownloadRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .padding(top = 2.dp)
-                        .clickable(enabled = record.caption != null && !inSelectionMode) {
-                            captionExpanded = !captionExpanded
-                        }
+                        .then(
+                            if (record.caption == null) Modifier else Modifier.combinedClickable(
+                                onClick = { if (inSelectionMode) onClick() else captionExpanded = !captionExpanded },
+                                onLongClick = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    copyCaption(context, record.caption)
+                                }
+                            )
+                        )
                 )
 
                 record.song?.let {
@@ -407,6 +420,15 @@ private fun DownloadRow(
                 }
             }
         }
+    }
+}
+
+private fun copyCaption(context: Context, caption: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.library_caption_clip_label), caption))
+    // Android 13+ shows its own confirmation when something is copied.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, R.string.library_caption_copied, Toast.LENGTH_SHORT).show()
     }
 }
 
