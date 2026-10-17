@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.widget.Toast
 import android.provider.DocumentsContract
 import android.text.format.DateUtils
 import android.text.format.Formatter
@@ -47,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +79,8 @@ class MainActivity : ComponentActivity() {
     private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
     private class SharedUrl(val url: String)
     private val sharedUrl = mutableStateOf(SharedUrl(""))
+    private val showLibrary = mutableStateOf(false)
+    private val highlightedDownloads = mutableStateOf<Set<String>>(emptySet())
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -103,6 +107,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
+        showLibrary.value = savedInstanceState?.getBoolean(STATE_SHOW_LIBRARY)
+            ?: intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
 
         setContent {
             val settings = appSettings
@@ -113,16 +119,33 @@ class MainActivity : ComponentActivity() {
                 AppTheme.DARK -> true
             }
             InstaDownloadTheme(darkTheme = useDarkTheme) {
-                InstagramDownloaderScreen(
-                    initialUrl = sharedUrl.value.url,
-                    initialUrlKey = sharedUrl.value,
-                    useDarkTheme = useDarkTheme,
-                    settings = settings,
-                    selectedFolderName = selectedFolderName.value,
-                    onChooseFolder = { folderPickerLauncher.launch(null) },
-                    onThemeChanged = { selectedTheme = it },
-                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME }
-                )
+                // The downloader stays composed under the library so its state survives a round trip.
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(if (showLibrary.value) Modifier.clearAndSetSemantics {} else Modifier)
+                    ) {
+                        InstagramDownloaderScreen(
+                            initialUrl = sharedUrl.value.url,
+                            initialUrlKey = sharedUrl.value,
+                            useDarkTheme = useDarkTheme,
+                            settings = settings,
+                            selectedFolderName = selectedFolderName.value,
+                            onChooseFolder = { folderPickerLauncher.launch(null) },
+                            onThemeChanged = { selectedTheme = it },
+                            onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
+                            onOpenLibrary = { openLibrary(highlight = emptySet()) },
+                            onDownloadsSaved = { saved -> openLibrary(highlight = saved.map { it.uri }.toSet()) }
+                        )
+                    }
+                    if (showLibrary.value) {
+                        DownloadsLibraryScreen(
+                            highlightedUris = highlightedDownloads.value,
+                            onBack = { showLibrary.value = false }
+                        )
+                    }
+                }
             }
         }
     }
@@ -130,7 +153,22 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        sharedUrl.value = SharedUrl(handleSharedIntent(intent))
+        val url = handleSharedIntent(intent)
+        sharedUrl.value = SharedUrl(url)
+        when {
+            intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false) -> openLibrary(highlight = emptySet())
+            url.isNotBlank() -> showLibrary.value = false
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_SHOW_LIBRARY, showLibrary.value)
+    }
+
+    private fun openLibrary(highlight: Set<String>) {
+        highlightedDownloads.value = highlight
+        showLibrary.value = true
     }
 
     private fun handleSharedIntent(intent: Intent): String {
@@ -151,7 +189,9 @@ class MainActivity : ComponentActivity() {
         selectedFolderName: String = settings.downloadFolderName,
         onChooseFolder: () -> Unit = {},
         onThemeChanged: (AppTheme) -> Unit = {},
-        onFolderAccessLost: () -> Unit = {}
+        onFolderAccessLost: () -> Unit = {},
+        onOpenLibrary: () -> Unit = {},
+        onDownloadsSaved: (List<DownloadRecord>) -> Unit = {}
     ) {
         var url by remember { mutableStateOf(initialUrl) }
         var isLoading by remember { mutableStateOf(false) }
@@ -160,7 +200,6 @@ class MainActivity : ComponentActivity() {
         var fullError by remember { mutableStateOf<String?>(null) }
         var media by remember { mutableStateOf<List<MediaResult>?>(null) }
         var deselectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
-        var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
         var targetWidth by remember { mutableIntStateOf(settings.targetWidth()) }
 
@@ -170,7 +209,6 @@ class MainActivity : ComponentActivity() {
                 media = null
                 urlError = null
                 fullError = null
-                downloadComplete = false
             }
         }
 
@@ -201,7 +239,6 @@ class MainActivity : ComponentActivity() {
             fullError = null
             media = null
             deselectedIndices = emptySet()
-            downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
                     InstagramDownloader.getMediaItems(trimmed, targetWidth)
@@ -438,10 +475,13 @@ class MainActivity : ComponentActivity() {
                                         hapticStart(context, settings.hapticsEnabled)
                                         isSaving = true
                                         var fellBackToDefaultFolder = false
+                                        val savedRecords = mutableListOf<DownloadRecord>()
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
                                                 itemsToSave.forEach { item ->
-                                                    if (saveToDownloads(item, context, settings)) {
+                                                    val outcome = saveToDownloads(item, context, settings)
+                                                    savedRecords += outcome.record
+                                                    if (outcome.fellBackToDefaultFolder) {
                                                         fellBackToDefaultFolder = true
                                                     }
                                                 }
@@ -453,14 +493,16 @@ class MainActivity : ComponentActivity() {
                                         }
                                         if (dlResult.isSuccess) {
                                             hapticComplete(context, settings.hapticsEnabled)
-                                            downloadComplete = true
                                             if (fellBackToDefaultFolder) {
-                                                fullError = context.getString(R.string.error_folder_access_lost)
+                                                Toast.makeText(
+                                                    context,
+                                                    R.string.error_folder_access_lost,
+                                                    Toast.LENGTH_LONG
+                                                ).show()
                                             }
-                                            delay(2500)
-                                            downloadComplete = false
                                             media = null
                                             deselectedIndices = emptySet()
+                                            onDownloadsSaved(savedRecords)
                                         } else {
                                             fullError = dlResult.exceptionOrNull()?.message
                                                 ?: context.getString(R.string.error_download_failed)
@@ -495,20 +537,6 @@ class MainActivity : ComponentActivity() {
                                     Text(
                                         stringResource(R.string.saving_label),
                                         style = MaterialTheme.typography.labelLarge
-                                    )
-                                }
-                                downloadComplete -> {
-                                    Icon(
-                                        imageVector = AppIcons.Download,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        stringResource(R.string.saved_label),
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontWeight = FontWeight.Bold
-                                        )
                                     )
                                 }
                                 else -> {
@@ -696,8 +724,17 @@ class MainActivity : ComponentActivity() {
                     .padding(innerPadding)
                     .fillMaxWidth()
                     .padding(8.dp),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
+                IconButton(
+                    onClick = onOpenLibrary,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Black.copy(alpha = 0.18f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(AppIcons.VideoLibrary, contentDescription = stringResource(R.string.library_title))
+                }
                 IconButton(
                     onClick = { showSettings = true },
                     colors = IconButtonDefaults.iconButtonColors(
@@ -709,6 +746,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_LIBRARY = "com.vakarux.instadownload.extra.OPEN_LIBRARY"
+        private const val STATE_SHOW_LIBRARY = "show_library"
     }
 
     @Composable

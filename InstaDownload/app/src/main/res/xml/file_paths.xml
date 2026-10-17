@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lets other apps open or receive files saved to Downloads/InstaDownload on Android 9 and older. -->
+<paths>
+    <external-path name="downloads" path="Download/" />
+</paths>

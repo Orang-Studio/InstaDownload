@@ -51,7 +51,8 @@ class QuickDownloadService : Service() {
                             } else {
                                 getString(R.string.quick_download_complete_text)
                             },
-                            ongoing = false
+                            ongoing = false,
+                            opensLibrary = true
                         )
                     },
                     onFailure = { error ->
@@ -80,7 +81,7 @@ class QuickDownloadService : Service() {
         val settings = AppSettings(this)
         val items = InstagramDownloader.getMediaItems(url, settings.targetWidth())
         if (items.isEmpty()) throw Exception(getString(R.string.error_download_failed))
-        return items.map { saveToDownloads(it, this, settings) }.any { it }
+        return items.map { saveToDownloads(it, this, settings) }.any { it.fellBackToDefaultFolder }
     }
 
     private fun createNotificationChannel() {
@@ -104,12 +105,12 @@ class QuickDownloadService : Service() {
         }
     }
 
-    private fun buildNotification(title: String, text: String, ongoing: Boolean) =
+    private fun buildNotification(title: String, text: String, ongoing: Boolean, opensLibrary: Boolean = false) =
         NotificationCompat.Builder(this, if (ongoing) CHANNEL_ID else RESULT_CHANNEL_ID)
             .setSmallIcon(R.drawable.download)
             .setContentTitle(title)
             .setContentText(text)
-            .setContentIntent(mainActivityPendingIntent())
+            .setContentIntent(mainActivityPendingIntent(opensLibrary))
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
             .setOnlyAlertOnce(true)
@@ -119,13 +120,15 @@ class QuickDownloadService : Service() {
             }
             .build()
 
-    private fun mainActivityPendingIntent(): PendingIntent {
+    private fun mainActivityPendingIntent(opensLibrary: Boolean): PendingIntent {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_OPEN_LIBRARY, opensLibrary)
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        return PendingIntent.getActivity(this, 0, intent, flags)
+        val requestCode = if (opensLibrary) 1 else 0
+        return PendingIntent.getActivity(this, requestCode, intent, flags)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

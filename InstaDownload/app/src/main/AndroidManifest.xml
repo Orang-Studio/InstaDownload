@@ -70,6 +70,17 @@
             android:name=".QuickDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Shares files saved with a file:// path (Android 9 and older) from the downloads screen. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

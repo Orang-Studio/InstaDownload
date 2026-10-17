@@ -39,7 +39,6 @@
     <string name="error_download_failed">Download failed</string>
 
     <string name="saving_label">Saving…</string>
-    <string name="saved_label">Saved!</string>
     <string name="download_label">Download</string>
 
     <string name="preview_label">Preview</string>
@@ -77,4 +76,37 @@
     <string name="error_create_file_in_downloads">Could not create file in Downloads</string>
     <string name="error_folder_access_lost">Lost access to the selected folder, downloading to the default Downloads folder instead. You can change it back in Settings.</string>
     <string name="error_storage_permission_lost">Please grant file permission in Settings and try again.</string>
+
+    <string name="library_title">Downloads</string>
+    <string name="library_back">Back</string>
+    <string name="library_selected_count">%1$d selected</string>
+    <string name="library_clear_selection">Clear selection</string>
+    <string name="library_select_all">Select all</string>
+    <string name="library_share">Share</string>
+    <string name="library_delete">Delete</string>
+    <string name="library_cancel">Cancel</string>
+    <string name="library_delete_body">The files will be removed from your device.</string>
+    <string name="library_empty_title">No downloads yet</string>
+    <string name="library_empty_body">Videos and photos you download appear here.</string>
+    <string name="library_unknown_account">Unknown account</string>
+    <string name="library_no_caption">No caption</string>
+    <string name="library_no_link">Post link unavailable</string>
+    <string name="library_open_post">Open post</string>
+    <string name="library_song_format">♪ %1$s</string>
+    <string name="library_posted_format">Posted %1$s</string>
+    <string name="library_downloaded_format">Downloaded %1$s</string>
+    <string name="library_file_missing">File not found. It may have been moved or deleted.</string>
+    <string name="library_no_app_to_open">No app on this device can open this file</string>
+    <plurals name="library_delete_title">
+        <item quantity="one">Delete %1$d item?</item>
+        <item quantity="other">Delete %1$d items?</item>
+    </plurals>
+    <plurals name="library_deleted">
+        <item quantity="one">Deleted %1$d item</item>
+        <item quantity="other">Deleted %1$d items</item>
+    </plurals>
+    <plurals name="library_delete_failed">
+        <item quantity="one">Couldn\'t delete %1$d item</item>
+        <item quantity="other">Couldn\'t delete %1$d items</item>
+    </plurals>
 </resources>
