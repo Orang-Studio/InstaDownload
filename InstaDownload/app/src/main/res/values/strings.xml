@@ -44,6 +44,11 @@
     <string name="downloads_label">Downloads</string>
     <string name="downloads_title">Downloads</string>
     <string name="downloads_empty">Nothing downloaded yet.</string>
+    <string name="downloads_empty_kind">No %1$s downloaded yet.</string>
+    <string name="downloads_all">All</string>
+    <string name="downloads_reels">Reels</string>
+    <string name="downloads_posts">Posts</string>
+    <string name="downloads_stories">Stories</string>
     <string name="close_label">Close</string>
     <string name="back_label">Back</string>
     <string name="open_label">Open</string>

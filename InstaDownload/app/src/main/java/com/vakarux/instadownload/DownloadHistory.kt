@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -110,6 +111,15 @@ object DownloadedFiles {
     }
 
     fun previewBitmap(context: Context, record: DownloadRecord, maxSide: Int): Bitmap? = runCatching {
+        if (record.mimeType.startsWith("video/")) {
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(context, Uri.parse(record.uri))
+                retriever.getFrameAtTime(0)?.let { scaleDown(it, maxSide) }
+            } finally {
+                retriever.release()
+            }
+        }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         openInput(context, record).use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -118,6 +128,18 @@ object DownloadedFiles {
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         openInput(context, record).use { BitmapFactory.decodeStream(it, null, options) }
     }.getOrNull()
+
+    private fun scaleDown(bitmap: Bitmap, maxSide: Int): Bitmap {
+        val longest = maxOf(bitmap.width, bitmap.height)
+        if (longest <= maxSide) return bitmap
+        val scale = maxSide.toFloat() / longest
+        return Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * scale).toInt().coerceAtLeast(1),
+            (bitmap.height * scale).toInt().coerceAtLeast(1),
+            true
+        ).also { if (it !== bitmap) bitmap.recycle() }
+    }
 
     fun delete(context: Context, record: DownloadRecord): Boolean {
         val uri = Uri.parse(record.uri)

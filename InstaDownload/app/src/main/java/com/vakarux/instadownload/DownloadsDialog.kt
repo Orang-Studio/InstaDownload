@@ -13,19 +13,28 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -47,59 +56,106 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.vakarux.instadownload.ui.AppIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 import kotlin.math.roundToLong
 
+private enum class DownloadKind(val labelRes: Int) {
+    ALL(R.string.downloads_all),
+    REELS(R.string.downloads_reels),
+    POSTS(R.string.downloads_posts),
+    STORIES(R.string.downloads_stories)
+}
+
+private val DownloadRecord.kind: DownloadKind
+    get() = when {
+        meta?.url?.contains("/stories/") == true -> DownloadKind.STORIES
+        meta?.url?.contains("/reel") == true -> DownloadKind.REELS
+        else -> DownloadKind.POSTS
+    }
+
 @Composable
 fun DownloadsDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var records by remember { mutableStateOf(DownloadHistory.load(context)) }
     var previewRecord by remember { mutableStateOf<DownloadRecord?>(null) }
+    var selectedKind by remember { mutableStateOf(DownloadKind.ALL) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
+            color = MaterialTheme.colorScheme.background
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         stringResource(if (previewRecord == null) R.string.downloads_title else R.string.preview_label),
                         style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).padding(start = 20.dp, top = 16.dp, bottom = 12.dp)
                     )
                     TextButton(onClick = {
                         if (previewRecord == null) onDismiss() else previewRecord = null
-                    }) {
+                    }, modifier = Modifier.padding(top = 8.dp, end = 12.dp)) {
                         Text(stringResource(if (previewRecord == null) R.string.close_label else R.string.back_label))
                     }
                 }
                 val record = previewRecord
                 if (record != null) {
-                    MediaPreview(record)
-                } else if (records.isEmpty()) {
-                    Text(
-                        stringResource(R.string.downloads_empty),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 32.dp)
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 20.dp)
+                    ) { MediaPreview(record) }
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 560.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ScrollableTabRow(
+                        selectedTabIndex = selectedKind.ordinal,
+                        edgePadding = 12.dp
                     ) {
-                        items(records, key = { it.uri }) { record ->
-                            DownloadRow(
-                                record = record,
-                                onPreview = { previewRecord = record },
-                                onDeleted = {
-                                    DownloadHistory.remove(context, record)
-                                    records = records.filterNot { it.uri == record.uri }
-                                }
+                        DownloadKind.entries.forEach { kind ->
+                            Tab(
+                                selected = selectedKind == kind,
+                                onClick = { selectedKind = kind },
+                                text = { Text(stringResource(kind.labelRes)) }
                             )
+                        }
+                    }
+                    val visibleRecords = records.filter {
+                        selectedKind == DownloadKind.ALL || it.kind == selectedKind
+                    }
+                    if (visibleRecords.isEmpty()) {
+                        Text(
+                            if (records.isEmpty()) stringResource(R.string.downloads_empty)
+                            else stringResource(
+                                R.string.downloads_empty_kind,
+                                stringResource(selectedKind.labelRes)
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(32.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(visibleRecords, key = { it.uri }) { record ->
+                                DownloadRow(
+                                    record = record,
+                                    onPreview = { previewRecord = record },
+                                    onDeleted = {
+                                        DownloadHistory.remove(context, record)
+                                        records = records.filterNot { it.uri == record.uri }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -126,77 +182,152 @@ private fun DownloadRow(
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                meta?.username?.let { "@$it" } ?: stringResource(R.string.unknown_account),
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                meta?.caption ?: stringResource(R.string.no_caption),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp)
-            )
-            val details = listOfNotNull(
-                meta?.song,
-                meta?.takenAtSec?.takeIf { it > 0 }
-                    ?.let { stringResource(R.string.posted_date_format, formatDate(it * 1000)) },
-                record.takeIf { it.width > 0 && it.height > 0 }
-                    ?.let { "${it.width}×${it.height}" },
-                record.durationSec.takeIf { it > 0 }?.let { DateUtils.formatElapsedTime(it.roundToLong()) },
-                size.takeIf { it > 0 }?.let { Formatter.formatShortFileSize(context, it) },
-                stringResource(R.string.downloaded_date_format, formatDate(record.downloadedAt))
-            )
-            Text(
-                details.joinToString(" · "),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            meta?.url?.let { postUrl ->
-                Text(
-                    postUrl,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .padding(top = 3.dp)
-                        .clickable { uriHandler.openUri(postUrl) }
+            Row(verticalAlignment = Alignment.Top) {
+                DownloadThumbnail(
+                    record = record,
+                    exists = exists,
+                    onClick = onPreview
                 )
-            } ?: Text(
-                stringResource(R.string.no_post_link),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 3.dp)
-            )
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        meta?.username?.let { "@$it" } ?: stringResource(R.string.unknown_account),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        meta?.caption ?: stringResource(R.string.no_caption),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    val details = listOfNotNull(
+                        meta?.song,
+                        meta?.takenAtSec?.takeIf { it > 0 }
+                            ?.let { stringResource(R.string.posted_date_format, formatDate(it * 1000)) },
+                        record.takeIf { it.width > 0 && it.height > 0 }
+                            ?.let { "${it.width}×${it.height}" },
+                        record.durationSec.takeIf { it > 0 }
+                            ?.let { DateUtils.formatElapsedTime(it.roundToLong()) },
+                        size.takeIf { it > 0 }?.let { Formatter.formatShortFileSize(context, it) },
+                        stringResource(R.string.downloaded_date_format, formatDate(record.downloadedAt))
+                    )
+                    Text(
+                        details.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    meta?.url?.let { postUrl ->
+                        Text(
+                            postUrl,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .padding(top = 3.dp)
+                                .clickable { uriHandler.openUri(postUrl) }
+                        )
+                    } ?: Text(
+                        stringResource(R.string.no_post_link),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 3.dp)
+                    )
+                }
+            }
             if (exists == false) {
                 Text(
                     stringResource(R.string.file_missing),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 3.dp)
+                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onPreview, enabled = exists != false) {
-                    Text(stringResource(R.string.preview_label))
-                }
-                TextButton(onClick = {
-                    startFileAction(context) { DownloadedFiles.openIntent(context, record) }
-                }, enabled = exists != false) { Text(stringResource(R.string.open_label)) }
-                TextButton(onClick = {
-                    startFileAction(context) { DownloadedFiles.shareIntent(context, record) }
-                }, enabled = exists != false) { Text(stringResource(R.string.share_label)) }
-                TextButton(onClick = {
-                    if (DownloadedFiles.delete(context, record)) onDeleted()
-                    else Toast.makeText(context, R.string.delete_failed, Toast.LENGTH_SHORT).show()
-                }) { Text(stringResource(R.string.delete_label)) }
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                TextButton(
+                    onClick = onPreview,
+                    enabled = exists != false,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) { Text(stringResource(R.string.preview_label), maxLines = 1) }
+                TextButton(
+                    onClick = { startFileAction(context) { DownloadedFiles.openIntent(context, record) } },
+                    enabled = exists != false,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) { Text(stringResource(R.string.open_label), maxLines = 1) }
+                TextButton(
+                    onClick = { startFileAction(context) { DownloadedFiles.shareIntent(context, record) } },
+                    enabled = exists != false,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) { Text(stringResource(R.string.share_label), maxLines = 1) }
+                TextButton(
+                    onClick = {
+                        if (DownloadedFiles.delete(context, record)) onDeleted()
+                        else Toast.makeText(context, R.string.delete_failed, Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) { Text(stringResource(R.string.delete_label), maxLines = 1) }
             }
+        }
+    }
+}
+
+@Composable
+private fun DownloadThumbnail(record: DownloadRecord, exists: Boolean?, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val bitmap by produceState<ImageBitmap?>(null, record.uri, exists) {
+        if (exists != false) {
+            value = withContext(Dispatchers.IO) {
+                DownloadedFiles.previewBitmap(context, record, 320)?.asImageBitmap()
+            }
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(width = 104.dp, height = 132.dp)
+            .background(Color.Black.copy(alpha = 0.18f))
+            .clickable(enabled = exists != false, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        bitmap?.let {
+            Image(
+                bitmap = it,
+                contentDescription = stringResource(
+                    if (record.mimeType.startsWith("video/")) {
+                        R.string.video_preview_description
+                    } else {
+                        R.string.image_preview_description
+                    }
+                ),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(132.dp)
+            )
+        } ?: if (exists == null) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        } else {
+            Icon(
+                imageVector = if (record.mimeType.startsWith("video/")) AppIcons.Movie else AppIcons.Image,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(32.dp)
+            )
+        }
+        if (record.mimeType.startsWith("video/") && bitmap != null) {
+            Icon(
+                imageVector = AppIcons.PlayArrow,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(32.dp)
+            )
         }
     }
 }
