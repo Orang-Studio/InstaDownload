@@ -45,6 +45,7 @@
     <string name="downloads_title">Downloads</string>
     <string name="downloads_empty">Nothing downloaded yet.</string>
     <string name="close_label">Close</string>
+    <string name="back_label">Back</string>
     <string name="open_label">Open</string>
     <string name="share_label">Share</string>
     <string name="delete_label">Delete</string>
@@ -57,6 +58,7 @@
     <string name="delete_failed">Could not delete this file</string>
     <string name="no_app_to_open">No app can open this file</string>
     <string name="file_action_failed">Could not open this file</string>
+    <string name="preview_unavailable">Preview unavailable for this file</string>
 
     <string name="preview_label">Preview</string>
     <string name="items_count_format">%1$d items</string>

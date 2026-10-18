@@ -3,6 +3,8 @@ package com.vakarux.instadownload
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -10,6 +12,8 @@ import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
 
 data class DownloadRecord(
     val uri: String,
@@ -105,6 +109,16 @@ object DownloadedFiles {
         }.getOrDefault(-1L)
     }
 
+    fun previewBitmap(context: Context, record: DownloadRecord, maxSide: Int): Bitmap? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openInput(context, record).use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        openInput(context, record).use { BitmapFactory.decodeStream(it, null, options) }
+    }.getOrNull()
+
     fun delete(context: Context, record: DownloadRecord): Boolean {
         val uri = Uri.parse(record.uri)
         return runCatching {
@@ -137,5 +151,14 @@ object DownloadedFiles {
                 context, "${context.packageName}.fileprovider", File(requireNotNull(uri.path))
             )
         } else uri
+    }
+
+    private fun openInput(context: Context, record: DownloadRecord): InputStream {
+        val uri = Uri.parse(record.uri)
+        return if (uri.scheme == "file") {
+            FileInputStream(File(requireNotNull(uri.path)))
+        } else {
+            requireNotNull(context.contentResolver.openInputStream(uri))
+        }
     }
 }

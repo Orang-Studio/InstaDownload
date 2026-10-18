@@ -1,36 +1,51 @@
 package com.vakarux.instadownload
 
 import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.widget.Toast
+import android.widget.MediaController
+import android.widget.VideoView
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,6 +57,7 @@ import kotlin.math.roundToLong
 fun DownloadsDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var records by remember { mutableStateOf(DownloadHistory.load(context)) }
+    var previewRecord by remember { mutableStateOf<DownloadRecord?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -51,13 +67,20 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        stringResource(R.string.downloads_title),
+                        stringResource(if (previewRecord == null) R.string.downloads_title else R.string.preview_label),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.close_label)) }
+                    TextButton(onClick = {
+                        if (previewRecord == null) onDismiss() else previewRecord = null
+                    }) {
+                        Text(stringResource(if (previewRecord == null) R.string.close_label else R.string.back_label))
+                    }
                 }
-                if (records.isEmpty()) {
+                val record = previewRecord
+                if (record != null) {
+                    MediaPreview(record)
+                } else if (records.isEmpty()) {
                     Text(
                         stringResource(R.string.downloads_empty),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -71,6 +94,7 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
                         items(records, key = { it.uri }) { record ->
                             DownloadRow(
                                 record = record,
+                                onPreview = { previewRecord = record },
                                 onDeleted = {
                                     DownloadHistory.remove(context, record)
                                     records = records.filterNot { it.uri == record.uri }
@@ -85,7 +109,11 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun DownloadRow(record: DownloadRecord, onDeleted: () -> Unit) {
+private fun DownloadRow(
+    record: DownloadRecord,
+    onPreview: () -> Unit,
+    onDeleted: () -> Unit
+) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val exists by produceState<Boolean?>(null, record.uri) {
@@ -155,6 +183,9 @@ private fun DownloadRow(record: DownloadRecord, onDeleted: () -> Unit) {
                 )
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onPreview, enabled = exists != false) {
+                    Text(stringResource(R.string.preview_label))
+                }
                 TextButton(onClick = {
                     startFileAction(context) { DownloadedFiles.openIntent(context, record) }
                 }, enabled = exists != false) { Text(stringResource(R.string.open_label)) }
@@ -167,6 +198,103 @@ private fun DownloadRow(record: DownloadRecord, onDeleted: () -> Unit) {
                 }) { Text(stringResource(R.string.delete_label)) }
             }
         }
+    }
+}
+
+@Composable
+private fun MediaPreview(record: DownloadRecord) {
+    val context = LocalContext.current
+    Column {
+        if (record.mimeType.startsWith("video/")) VideoPreview(record) else ImagePreview(record)
+        record.meta?.caption?.let {
+            Text(
+                it,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = {
+                startFileAction(context) { DownloadedFiles.shareIntent(context, record) }
+            }) { Text(stringResource(R.string.share_label)) }
+        }
+    }
+}
+
+@Composable
+private fun ImagePreview(record: DownloadRecord) {
+    val context = LocalContext.current
+    val result by produceState<Result<ImageBitmap>?>(null, record.uri) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                DownloadedFiles.previewBitmap(context, record, 1200)?.asImageBitmap()
+                    ?: error("Preview unavailable")
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(300.dp)
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            result == null -> CircularProgressIndicator(color = Color.White)
+            result?.isSuccess == true -> Image(
+                bitmap = result!!.getOrThrow(),
+                contentDescription = stringResource(R.string.image_preview_description),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().height(300.dp)
+            )
+            else -> Text(
+                stringResource(R.string.preview_unavailable),
+                color = Color.White,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VideoPreview(record: DownloadRecord) {
+    val context = LocalContext.current
+    var failed by remember(record.uri) { mutableStateOf(false) }
+    val videoView = remember(record.uri) {
+        VideoView(context).apply {
+            setMediaController(MediaController(context))
+            setVideoURI(Uri.parse(record.uri))
+            setOnPreparedListener { it.start() }
+            setOnErrorListener { _, _, _ ->
+                failed = true
+                true
+            }
+        }
+    }
+    DisposableEffect(videoView) {
+        onDispose { videoView.stopPlayback() }
+    }
+
+    if (failed) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(stringResource(R.string.preview_unavailable), color = Color.White)
+        }
+    } else {
+        AndroidView(
+            factory = { videoView },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+        )
     }
 }
 
