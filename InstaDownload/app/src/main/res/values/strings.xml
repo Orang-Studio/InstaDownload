@@ -41,6 +41,22 @@
     <string name="saving_label">Saving…</string>
     <string name="saved_label">Saved!</string>
     <string name="download_label">Download</string>
+    <string name="downloads_label">Downloads</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty">Nothing downloaded yet.</string>
+    <string name="close_label">Close</string>
+    <string name="open_label">Open</string>
+    <string name="share_label">Share</string>
+    <string name="delete_label">Delete</string>
+    <string name="no_caption">No caption</string>
+    <string name="unknown_account">Unknown account</string>
+    <string name="no_post_link">Post link unavailable</string>
+    <string name="posted_date_format">Posted %1$s</string>
+    <string name="downloaded_date_format">Downloaded %1$s</string>
+    <string name="file_missing">File not found</string>
+    <string name="delete_failed">Could not delete this file</string>
+    <string name="no_app_to_open">No app can open this file</string>
+    <string name="file_action_failed">Could not open this file</string>
 
     <string name="preview_label">Preview</string>
     <string name="items_count_format">%1$d items</string>
