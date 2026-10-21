@@ -18,8 +18,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -63,7 +65,7 @@ import kotlin.math.roundToLong
 
 // Instagram brand gradient colors
 private val IgPurple = Color(0xFF833AB4)
-private val IgPink   = Color(0xFFE1306C)
+internal val IgPink   = Color(0xFFE1306C)
 private val IgOrange = Color(0xFFF77737)
 
 // Dark equivalents (desaturated per MD3 dark mode guidance)
@@ -173,6 +175,7 @@ class MainActivity : ComponentActivity() {
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
         var targetWidth by remember { mutableIntStateOf(settings.targetWidth()) }
+        var profileToBrowse by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(initialUrlKey) {
             if (initialUrl.isNotBlank()) {
@@ -201,7 +204,8 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(url, targetWidth) {
             val trimmed = url.trim()
-            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || isStoryUrl(trimmed)) {
+            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || isStoryUrl(trimmed) ||
+                InstagramDownloader.isProfileUrl(trimmed)) {
                 media = null
                 return@LaunchedEffect
             }
@@ -425,6 +429,8 @@ class MainActivity : ComponentActivity() {
                                         urlError = context.getString(R.string.error_invalid_url)
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
+                                    InstagramDownloader.isProfileUrl(trimmed) ->
+                                        profileToBrowse = InstagramDownloader.extractProfileUsername(trimmed)
                                     else -> coroutineScope.launch {
                                         fullError = null
                                         val items = media ?: run {
@@ -523,14 +529,15 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 else -> {
+                                    val isProfile = InstagramDownloader.isProfileUrl(url.trim())
                                     Icon(
-                                        imageVector = AppIcons.Download,
+                                        imageVector = if (isProfile) AppIcons.Image else AppIcons.Download,
                                         contentDescription = null,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        stringResource(R.string.download_label),
+                                        stringResource(if (isProfile) R.string.open_profile_label else R.string.download_label),
                                         style = MaterialTheme.typography.labelLarge.copy(
                                             fontWeight = FontWeight.Bold
                                         )
@@ -724,6 +731,20 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Icon(AppIcons.Settings, contentDescription = stringResource(R.string.settings_content_description))
                 }
+            }
+        }
+
+        profileToBrowse?.let { username ->
+            AnimatedVisibility(
+                visibleState = remember { MutableTransitionState(false) }.apply { targetState = true },
+                enter = slideInVertically(tween(250)) { it / 4 } + fadeIn(tween(250))
+            ) {
+                ProfileBrowser(
+                    username = username,
+                    settings = settings,
+                    onFolderAccessLost = onFolderAccessLost,
+                    onClose = { profileToBrowse = null }
+                )
             }
         }
     }

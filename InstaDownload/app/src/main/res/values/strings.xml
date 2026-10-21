@@ -104,4 +104,37 @@
     <string name="pause_label">Pause</string>
     <string name="fullscreen_label">Fullscreen</string>
     <string name="exit_fullscreen_label">Exit fullscreen</string>
+
+    <string name="open_profile_label">Open profile</string>
+    <string name="profile_title_format">\@%1$s</string>
+    <string name="profile_loading_format">Loading… %1$d posts</string>
+    <string name="profile_loaded_format">%1$d posts loaded</string>
+    <string name="profile_all_loaded_format">All %1$d posts loaded</string>
+    <string name="stop_loading_label">Stop</string>
+    <string name="load_more_label">Load more</string>
+    <string name="retry_label">Retry</string>
+    <string name="profile_selected_format">%1$d of %2$d posts selected</string>
+    <string name="select_all_label">Select all</string>
+    <string name="select_none_label">Select none</string>
+    <string name="profile_no_matches">No posts match these filters</string>
+    <string name="profile_download_format">Download %1$d files</string>
+    <string name="profile_saving_format">Saving %1$d of %2$d… tap to stop</string>
+    <string name="profile_saved_format">Saved %1$d files</string>
+    <string name="profile_saved_failed_format">Saved %1$d files, %2$d failed</string>
+    <string name="filter_type_all">All types</string>
+    <string name="filter_type_photos">Photos</string>
+    <string name="filter_type_videos">Videos</string>
+    <string name="filter_type_carousels">Carousels</string>
+    <string name="filter_date_any">Any date</string>
+    <string name="filter_date_week">Last 7 days</string>
+    <string name="filter_date_month">Last 30 days</string>
+    <string name="filter_date_year">This year</string>
+    <string name="filter_date_custom">Custom range…</string>
+    <string name="filter_caption">Caption</string>
+    <string name="filter_caption_format">Caption: “%1$s”</string>
+    <string name="filter_caption_title">Caption contains</string>
+    <string name="filter_caption_hint">Word, #hashtag or \@mention</string>
+    <string name="reset_filters_label">Reset</string>
+    <string name="clear_label">Clear</string>
+    <string name="cancel_label">Cancel</string>
 </resources>

@@ -2,6 +2,7 @@ package com.vakarux.instadownload
 
 import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,6 +33,21 @@ data class MediaResult(
 ) {
     val previewUrl: String? get() = thumbnailUrl ?: url.takeIf { !isVideo }
 }
+
+enum class PostType { PHOTO, VIDEO, CAROUSEL }
+
+data class ProfilePost(
+    val code: String,
+    val type: PostType,
+    val takenAtSec: Long,
+    val caption: String,
+    val previewUrl: String?,
+    val mediaCount: Int,
+)
+
+class ProfilePage(val posts: List<ProfilePost>, val nextCursor: String?, val profilePicUrl: String?)
+
+private class StaleQueryException(message: String) : Exception(message)
 
 object InstagramDownloader {
 
@@ -67,6 +83,14 @@ object InstagramDownloader {
 
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64; rv:157.0) Gecko/20100101 Firefox/157.0"
+    private const val IG_APP_ID = "936619743392459"
+    private const val PROFILE_QUERY = "PolarisLoggedOutDesktopWWWProfilePostsTabContentQuery_connection"
+    private const val IG_EPOCH_MS = 1314220021721L
+
+    private var lsd: String? = null
+    private val profileIds = mutableMapOf<String, String>()
+    private val profilePics = mutableMapOf<String, String>()
 
     fun getMediaItems(postUrl: String, targetWidth: Int = Int.MAX_VALUE): List<MediaResult> {
         val shortcode = extractShortcode(postUrl) ?: run {
@@ -119,7 +143,8 @@ object InstagramDownloader {
             thumbnailUrl = preview,
             width = width,
             height = height,
-            durationSec = item.optDouble("video_duration", 0.0),
+            durationSec = item.optDouble("video_duration", 0.0).takeIf { it > 0 }
+                ?: dashDuration(item.optString("video_dash_manifest")),
             reduced = chosen.renditionWidth() < best
         )
     }
@@ -146,12 +171,155 @@ object InstagramDownloader {
         )
     }
 
-    private fun extractProfileUsername(url: String): String? {
+    fun extractProfileUsername(url: String): String? {
         val m = PROFILE_REGEX.matcher(url.trim())
         return if (m.matches()) m.group(1)?.takeUnless { it.lowercase() in RESERVED_PROFILE_PATHS } else null
     }
 
     fun isProfileUrl(url: String): Boolean = extractProfileUsername(url) != null
+
+    fun fetchProfilePage(username: String, cursor: String?, settings: AppSettings): ProfilePage {
+        val html = if (cursor == null || lsd == null || username !in profileIds) profileHtml(username) else null
+        settings.profileQuery?.let { cached ->
+            try {
+                return queryProfile(username, cursor, cached)
+            } catch (e: StaleQueryException) {
+                settings.profileQuery = null
+            }
+        }
+        val fresh = discoverProfileQuery(html ?: profileHtml(username))
+        settings.profileQuery = fresh
+        return try {
+            queryProfile(username, cursor, fresh)
+        } catch (e: StaleQueryException) {
+            throw Exception(
+                "Could not load posts for @$username. The account may be private or not exist.\n\n${e.message}"
+            )
+        }
+    }
+
+    private fun profileHtml(username: String): String {
+        val response = client.newCall(
+            Request.Builder()
+                .url("https://www.instagram.com/$username/")
+                .header("User-Agent", DESKTOP_UA)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "none")
+                .header("Sec-Fetch-User", "?1")
+                .header("Upgrade-Insecure-Requests", "1")
+                .get().build()
+        ).execute()
+        val html = response.body?.string()
+            ?: throw Exception("Profile HTTP ${response.code}: empty body")
+        if (!response.isSuccessful) throw Exception("Profile HTTP ${response.code}")
+        lsd = Regex(""""LSD",\[\],\{"token":"([^"]+)"""").find(html)?.groupValues?.get(1)
+            ?: throw Exception("Profile page: no LSD token")
+        Regex(""""profile_pic_url":"([^"]+)"""").find(html)?.groupValues?.get(1)?.let {
+            profilePics[username] = JSONObject("{\"u\":\"$it\"}").getString("u")
+        }
+        profileIds[username] = Regex(""""all_media_count":[^,]*,"id":"(\d+)"""").find(html)?.groupValues?.get(1)
+            ?: throw Exception("Could not find @$username. The account may not exist.")
+        return html
+    }
+
+    private fun discoverProfileQuery(html: String): String {
+        var docId: String? = null
+        var providedVariables: List<String>? = null
+        val docRegex = Regex(""""${PROFILE_QUERY}_instagramRelayOperation",\[\],\(function\([^)]*\)\{\w+\.exports="(\d+)"""")
+        val varsRegex = Regex("""name:"$PROFILE_QUERY",operationKind:"query",text:null,providedVariables:\{([^}]*)\}""")
+        Regex("""https:\\?/\\?/static\.cdninstagram\.com\\?/rsrc\.php\\?/[^"]+?\.js[^"]*""").findAll(html)
+            .map { it.value.replace("\\/", "/") }.distinct().toList().asReversed()
+            .forEach { jsUrl ->
+                if (docId != null && providedVariables != null) return@forEach
+                val js = runCatching {
+                    client.newCall(Request.Builder().url(jsUrl).header("User-Agent", DESKTOP_UA).get().build())
+                        .execute().use { it.body?.string() }
+                }.getOrNull() ?: return@forEach
+                docId = docId ?: docRegex.find(js)?.groupValues?.get(1)
+                providedVariables = providedVariables ?: varsRegex.find(js)?.groupValues?.get(1)
+                    ?.let { Regex("__relay_internal__pv__\\w+").findAll(it).map { m -> m.value }.distinct().toList() }
+            }
+        return "${docId ?: throw Exception("Could not find Instagram's profile posts query")}\n" +
+            providedVariables.orEmpty().joinToString(",")
+    }
+
+    private fun queryProfile(username: String, cursor: String?, query: String): ProfilePage {
+        val docId = query.substringBefore('\n')
+        val variables = JSONObject()
+            .put("after", cursor ?: JSONObject.NULL)
+            .put("first", 12)
+            .put("id", profileIds.getValue(username))
+        query.substringAfter('\n').split(',').filter { it.isNotBlank() }.forEach { variables.put(it, false) }
+        val csrf = cookieStore["www.instagram.com"]?.firstOrNull { it.name == "csrftoken" }?.value.orEmpty()
+        val response = client.newCall(
+            Request.Builder()
+                .url("https://www.instagram.com/api/graphql")
+                .header("User-Agent", DESKTOP_UA)
+                .header("X-IG-App-ID", IG_APP_ID)
+                .header("X-CSRFToken", csrf)
+                .header("X-FB-LSD", lsd.orEmpty())
+                .header("X-FB-Friendly-Name", PROFILE_QUERY)
+                .header("X-ASBD-ID", "359341")
+                .header("Origin", "https://www.instagram.com")
+                .header("Referer", "https://www.instagram.com/$username")
+                .header("Sec-Fetch-Dest", "empty")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Site", "same-origin")
+                .post(
+                    FormBody.Builder()
+                        .add("av", "0")
+                        .add("__user", "0")
+                        .add("__a", "1")
+                        .add("lsd", lsd.orEmpty())
+                        .add("fb_api_caller_class", "RelayModern")
+                        .add("fb_api_req_friendly_name", PROFILE_QUERY)
+                        .add("server_timestamps", "true")
+                        .add("variables", variables.toString())
+                        .add("doc_id", docId)
+                        .build()
+                ).build()
+        ).execute()
+        val text = response.use { it.body?.string().orEmpty() }
+        if (response.code == 429) throw Exception(
+            "Instagram is limiting requests right now. Wait a few minutes, then tap Retry.\n\n" +
+                "Profile query HTTP ${response.code}: ${text.take(200)}"
+        )
+        val connection = runCatching { JSONObject(text) }.getOrNull()
+            ?.optJSONObject("data")?.optJSONObject("node")?.optJSONObject("polaris_ordered_timeline_connection")
+            ?: throw StaleQueryException("Profile query HTTP ${response.code}: ${text.take(200)}")
+
+        val edges = connection.optJSONArray("edges") ?: JSONArray()
+        val posts = (0 until edges.length()).mapNotNull { i ->
+            val node = edges.optJSONObject(i)?.optJSONObject("node") ?: return@mapNotNull null
+            val code = node.optString("code").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            ProfilePost(
+                code = code,
+                type = when (node.optInt("media_type")) {
+                    8 -> PostType.CAROUSEL
+                    2 -> PostType.VIDEO
+                    else -> PostType.PHOTO
+                },
+                takenAtSec = node.optString("pk").toLongOrNull()?.let { ((it shr 23) + IG_EPOCH_MS) / 1000 } ?: 0L,
+                caption = node.optJSONObject("caption")?.optString("text").orEmpty(),
+                previewUrl = node.optString("display_uri").takeIf { it.isNotBlank() },
+                mediaCount = node.optInt("carousel_media_count").coerceAtLeast(1),
+            )
+        }
+        val pageInfo = connection.optJSONObject("page_info")
+        val next = pageInfo?.optString("end_cursor")
+            ?.takeIf { pageInfo.optBoolean("has_next_page") && it.isNotBlank() && it != cursor }
+        return ProfilePage(posts, next, profilePics[username])
+    }
+
+    private fun dashDuration(manifest: String): Double {
+        val m = Regex("""mediaPresentationDuration="PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?"""").find(manifest)
+            ?: return 0.0
+        val (h, min, sec) = m.destructured
+        return (h.toDoubleOrNull() ?: 0.0) * 3600 + (min.toDoubleOrNull() ?: 0.0) * 60 + (sec.toDoubleOrNull() ?: 0.0)
+    }
 
     private fun tryPostPage(shortcode: String, targetWidth: Int): List<MediaResult> {
         val response = client.newCall(
