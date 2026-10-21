@@ -5,14 +5,19 @@ import android.net.Uri
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.widget.Toast
-import android.widget.MediaController
 import android.widget.VideoView
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,7 +33,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
@@ -37,6 +52,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -50,6 +67,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +81,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.vakarux.instadownload.ui.AppIcons
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
@@ -84,17 +107,28 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
     var records by remember { mutableStateOf(DownloadHistory.load(context)) }
     var previewRecord by remember { mutableStateOf<DownloadRecord?>(null) }
     var selectedKind by remember { mutableStateOf(DownloadKind.ALL) }
+    var fullscreen by remember { mutableStateOf(false) }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (fullscreen) fullscreen = false else onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
+        val view = LocalView.current
+        LaunchedEffect(fullscreen) {
+            val window = (view.parent as? DialogWindowProvider)?.window ?: return@LaunchedEffect
+            WindowCompat.getInsetsController(window, view).run {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                if (fullscreen) hide(WindowInsetsCompat.Type.systemBars())
+                else show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
         Surface(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
-            color = MaterialTheme.colorScheme.background
+            modifier = Modifier.fillMaxSize()
+                .then(if (fullscreen) Modifier else Modifier.statusBarsPadding().navigationBarsPadding()),
+            color = if (fullscreen) Color.Black else MaterialTheme.colorScheme.background
         ) {
             Column {
-                Row(modifier = Modifier.fillMaxWidth()) {
+                if (!fullscreen) Row(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         stringResource(if (previewRecord == null) R.string.downloads_title else R.string.preview_label),
                         style = MaterialTheme.typography.headlineSmall,
@@ -111,9 +145,9 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f, fill = false)
-                            .padding(horizontal = 20.dp)
-                    ) { MediaPreview(record) }
+                            .weight(1f)
+                            .then(if (fullscreen) Modifier else Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
+                    ) { MediaPreview(record, fullscreen) { fullscreen = it } }
                 } else {
                     ScrollableTabRow(
                         selectedTabIndex = selectedKind.ordinal,
@@ -333,10 +367,28 @@ private fun DownloadThumbnail(record: DownloadRecord, exists: Boolean?, onClick:
 }
 
 @Composable
-private fun MediaPreview(record: DownloadRecord) {
+private fun ColumnScope.MediaFrame(fullscreen: Boolean = false, content: @Composable BoxScope.() -> Unit) {
+    Box(
+        modifier = Modifier
+            .then(
+                if (fullscreen) Modifier.weight(1f).fillMaxWidth()
+                else Modifier
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .aspectRatio(9f / 16f, matchHeightConstraintsFirst = true)
+            )
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+@Composable
+private fun MediaPreview(record: DownloadRecord, fullscreen: Boolean, onFullscreenChange: (Boolean) -> Unit) {
     val context = LocalContext.current
-    Column {
-        if (record.mimeType.startsWith("video/")) VideoPreview(record) else ImagePreview(record)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (record.mimeType.startsWith("video/")) VideoPreview(record, fullscreen, onFullscreenChange)
+        else ImagePreview(record)
+        if (fullscreen) return@Column
         record.meta?.caption?.let {
             Text(
                 it,
@@ -355,7 +407,7 @@ private fun MediaPreview(record: DownloadRecord) {
 }
 
 @Composable
-private fun ImagePreview(record: DownloadRecord) {
+private fun ColumnScope.ImagePreview(record: DownloadRecord) {
     val context = LocalContext.current
     val result by produceState<Result<ImageBitmap>?>(null, record.uri) {
         value = withContext(Dispatchers.IO) {
@@ -366,20 +418,14 @@ private fun ImagePreview(record: DownloadRecord) {
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(300.dp)
-            .background(Color.Black),
-        contentAlignment = Alignment.Center
-    ) {
+    MediaFrame {
         when {
             result == null -> CircularProgressIndicator(color = Color.White)
             result?.isSuccess == true -> Image(
                 bitmap = result!!.getOrThrow(),
                 contentDescription = stringResource(R.string.image_preview_description),
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().height(300.dp)
+                modifier = Modifier.fillMaxSize()
             )
             else -> Text(
                 stringResource(R.string.preview_unavailable),
@@ -390,41 +436,146 @@ private fun ImagePreview(record: DownloadRecord) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun VideoPreview(record: DownloadRecord) {
+private fun ColumnScope.VideoPreview(
+    record: DownloadRecord,
+    fullscreen: Boolean,
+    onFullscreenChange: (Boolean) -> Unit
+) {
     val context = LocalContext.current
     var failed by remember(record.uri) { mutableStateOf(false) }
+    var playing by remember(record.uri) { mutableStateOf(false) }
+    var durationMs by remember(record.uri) { mutableStateOf(0) }
+    var positionMs by remember(record.uri) { mutableFloatStateOf(0f) }
+    var seeking by remember(record.uri) { mutableStateOf(false) }
+    var controlsVisible by remember(record.uri) { mutableStateOf(true) }
     val videoView = remember(record.uri) {
         VideoView(context).apply {
-            setMediaController(MediaController(context))
             setVideoURI(Uri.parse(record.uri))
-            setOnPreparedListener { it.start() }
+            setOnPreparedListener {
+                durationMs = it.duration
+                it.start()
+                playing = true
+            }
+            setOnCompletionListener { playing = false }
             setOnErrorListener { _, _, _ ->
                 failed = true
                 true
             }
         }
     }
+    val togglePlay = {
+        if (playing) videoView.pause() else videoView.start()
+        playing = !playing
+    }
     DisposableEffect(videoView) {
         onDispose { videoView.stopPlayback() }
     }
-
-    if (failed) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(300.dp)
-                .background(Color.Black),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(stringResource(R.string.preview_unavailable), color = Color.White)
+    LaunchedEffect(fullscreen) { controlsVisible = true }
+    LaunchedEffect(controlsVisible, playing, seeking, fullscreen) {
+        if (fullscreen && controlsVisible && playing && !seeking) {
+            delay(3000)
+            controlsVisible = false
         }
-    } else {
-        AndroidView(
-            factory = { videoView },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(300.dp)
+    }
+    LaunchedEffect(videoView, playing) {
+        while (playing) {
+            if (!seeking) positionMs = videoView.currentPosition.toFloat()
+            delay(200)
+        }
+    }
+
+    val controls: @Composable (Modifier, Color) -> Unit = { modifier, textColor ->
+        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+            FilledIconButton(
+                onClick = togglePlay,
+                shapes = IconButtonDefaults.shapes(),
+                modifier = Modifier.size(IconButtonDefaults.mediumContainerSize())
+            ) {
+                Icon(
+                    imageVector = if (playing) AppIcons.Pause else AppIcons.PlayArrow,
+                    contentDescription = stringResource(if (playing) R.string.pause_label else R.string.play_label),
+                    modifier = Modifier.size(IconButtonDefaults.mediumIconSize)
+                )
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                val sliderInteraction = remember { MutableInteractionSource() }
+                val sliderState = remember(record.uri) { SliderState() }
+                if (!seeking && durationMs > 0) sliderState.value = positionMs / durationMs
+                Slider(
+                    state = sliderState,
+                    onValueChange = {
+                        seeking = true
+                        sliderState.value = it
+                        positionMs = it * durationMs
+                        videoView.seekTo(positionMs.toInt())
+                    },
+                    onValueChangeFinished = { seeking = false },
+                    enabled = durationMs > 0,
+                    interactionSource = sliderInteraction,
+                    thumb = { SliderDefaults.Thumb(sliderInteraction) },
+                    track = { state ->
+                        LinearWavyProgressIndicator(
+                            progress = { state.value },
+                            amplitude = { if (playing && !seeking) 1f else 0f },
+                            trackColor = Color.White.copy(alpha = 0.3f),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                )
+                Text(
+                    DateUtils.formatElapsedTime((positionMs / 1000).toLong()) + " / " +
+                        DateUtils.formatElapsedTime(durationMs / 1000L),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = textColor
+                )
+            }
+            IconButton(onClick = { onFullscreenChange(!fullscreen) }) {
+                Icon(
+                    imageVector = if (fullscreen) AppIcons.FullscreenExit else AppIcons.Fullscreen,
+                    contentDescription = stringResource(
+                        if (fullscreen) R.string.exit_fullscreen_label else R.string.fullscreen_label
+                    ),
+                    tint = textColor
+                )
+            }
+        }
+    }
+
+    MediaFrame(fullscreen) {
+        if (failed) {
+            Text(stringResource(R.string.preview_unavailable), color = Color.White)
+            return@MediaFrame
+        }
+        AndroidView(factory = { videoView }, modifier = Modifier.fillMaxSize())
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = null, indication = null) {
+                    if (!fullscreen) togglePlay() else controlsVisible = !controlsVisible
+                }
+        )
+        if (fullscreen) {
+            val shown = controlsVisible || !playing
+            val controlsAlpha by animateFloatAsState(if (shown) 1f else 0f, label = "controls")
+            if (shown || controlsAlpha > 0f) {
+                controls(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .alpha(controlsAlpha)
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
+                        .padding(start = 12.dp, end = 4.dp, top = 24.dp, bottom = 24.dp),
+                    Color.White
+                )
+            }
+        }
+    }
+    if (!failed && !fullscreen) {
+        controls(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

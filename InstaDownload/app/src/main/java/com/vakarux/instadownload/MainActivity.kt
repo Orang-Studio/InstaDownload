@@ -841,7 +841,7 @@ class MainActivity : ComponentActivity() {
                                 readOnly = true,
                                 label = { Text(stringResource(R.string.resolution_label)) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                                modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             )
                             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                 listOf(1080, 720, 640, 480, 320, 240).forEach { width ->

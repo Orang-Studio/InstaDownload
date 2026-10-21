@@ -100,4 +100,8 @@
     <string name="error_create_file_in_downloads">Could not create file in Downloads</string>
     <string name="error_folder_access_lost">Lost access to the selected folder, downloading to the default Downloads folder instead. You can change it back in Settings.</string>
     <string name="error_storage_permission_lost">Please grant file permission in Settings and try again.</string>
+    <string name="play_label">Play</string>
+    <string name="pause_label">Pause</string>
+    <string name="fullscreen_label">Fullscreen</string>
+    <string name="exit_fullscreen_label">Exit fullscreen</string>
 </resources>
