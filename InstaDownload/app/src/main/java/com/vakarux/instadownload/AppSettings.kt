@@ -46,6 +46,10 @@ class AppSettings(context: Context) {
         get() = prefs.getInt("custom_width", 720)
         set(value) = prefs.edit().putInt("custom_width", value).apply()
 
+    var profileQuery: String?
+        get() = prefs.getString("profile_query", null)
+        set(value) = prefs.edit().putString("profile_query", value).apply()
+
     fun targetWidth(): Int = when (effectiveQuality()) {
         DownloadQuality.DATA_SAVER -> 0
         DownloadQuality.CUSTOM -> customWidth
