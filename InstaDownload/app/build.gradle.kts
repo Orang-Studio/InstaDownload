@@ -1,19 +1,18 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.vakarux.instadownload"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.oranges.instadownload"
         minSdk = 24  // Android 7.0 (Nougat)
         targetSdk = 36
-        versionCode = 17
-        versionName = "2.7.1-stories"
+        versionCode = 20
+        versionName = "3.0.0-stories"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -41,12 +40,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     buildFeatures {
@@ -67,6 +62,17 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = false
         unitTests.all { it.enabled = false }   // disable unit tests
+    }
+}
+
+tasks.configureEach {
+    if (name == "assembleDebug") {
+        doLast {
+            val outputDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
+            val defaultApk = outputDir.resolve("app-debug.apk")
+            val namedApk = outputDir.resolve("instadownload-debug.apk")
+            if (defaultApk.exists()) defaultApk.copyTo(namedApk, overwrite = true)
+        }
     }
 }
 dependencies {

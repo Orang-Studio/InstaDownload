@@ -1,6 +1,17 @@
 <resources>
     <string name="app_name">InstaDownload</string>
     <string name="app_tagline">Save reels &amp; posts to your device</string>
+    <string name="quick_download_label">Quick download</string>
+    <string name="quick_download_channel_name">Quick downloads</string>
+    <string name="quick_download_channel_description">Downloads started from the share menu</string>
+    <string name="quick_download_results_channel_name">Quick download results</string>
+    <string name="quick_download_results_channel_description">Tells you when a quick download finishes or fails</string>
+    <string name="quick_download_in_progress_title">Downloading from Instagram</string>
+    <string name="quick_download_in_progress_text">Saving in the background</string>
+    <string name="quick_download_complete_title">Instagram download complete</string>
+    <string name="quick_download_complete_text">Saved to InstaDownload</string>
+    <string name="quick_download_complete_fallback">Saved to the default Downloads folder</string>
+    <string name="quick_download_failed_title">Instagram download failed</string>
 
     <string name="quality_auto_label">Auto</string>
     <string name="quality_auto_description">Use Data Saver quality when Android Data Saver is on</string>
@@ -40,6 +51,29 @@
     <string name="saving_label">Saving…</string>
     <string name="saved_label">Saved!</string>
     <string name="download_label">Download</string>
+    <string name="downloads_label">Downloads</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty">Nothing downloaded yet.</string>
+    <string name="downloads_empty_kind">No %1$s downloaded yet.</string>
+    <string name="downloads_all">All</string>
+    <string name="downloads_reels">Reels</string>
+    <string name="downloads_posts">Posts</string>
+    <string name="downloads_stories">Stories</string>
+    <string name="close_label">Close</string>
+    <string name="back_label">Back</string>
+    <string name="open_label">Open</string>
+    <string name="share_label">Share</string>
+    <string name="delete_label">Delete</string>
+    <string name="no_caption">No caption</string>
+    <string name="unknown_account">Unknown account</string>
+    <string name="no_post_link">Post link unavailable</string>
+    <string name="posted_date_format">Posted %1$s</string>
+    <string name="downloaded_date_format">Downloaded %1$s</string>
+    <string name="file_missing">File not found</string>
+    <string name="delete_failed">Could not delete this file</string>
+    <string name="no_app_to_open">No app can open this file</string>
+    <string name="file_action_failed">Could not open this file</string>
+    <string name="preview_unavailable">Preview unavailable for this file</string>
 
     <string name="preview_label">Preview</string>
     <string name="items_count_format">%1$d items</string>
@@ -55,7 +89,7 @@
     <string name="video_preview_description">Video preview</string>
     <string name="image_preview_description">Image preview</string>
     <string name="github_content_description">GitHub</string>
-    <string name="made_by_label">Made by Vakarux</string>
+    <string name="made_by_label">Open Source on GitHub</string>
     <string name="version_label_format">v%1$s</string>
     <string name="privacy_policy_label">Privacy policy</string>
 
@@ -76,4 +110,41 @@
     <string name="error_create_file_in_downloads">Could not create file in Downloads</string>
     <string name="error_folder_access_lost">Lost access to the selected folder, downloading to the default Downloads folder instead. You can change it back in Settings.</string>
     <string name="error_storage_permission_lost">Please grant file permission in Settings and try again.</string>
+    <string name="play_label">Play</string>
+    <string name="pause_label">Pause</string>
+    <string name="fullscreen_label">Fullscreen</string>
+    <string name="exit_fullscreen_label">Exit fullscreen</string>
+
+    <string name="open_profile_label">Open profile</string>
+    <string name="profile_title_format">\@%1$s</string>
+    <string name="profile_loading_format">Loading… %1$d posts</string>
+    <string name="profile_loaded_format">%1$d posts loaded</string>
+    <string name="profile_all_loaded_format">All %1$d posts loaded</string>
+    <string name="stop_loading_label">Stop</string>
+    <string name="load_more_label">Load more</string>
+    <string name="retry_label">Retry</string>
+    <string name="profile_selected_format">%1$d of %2$d posts selected</string>
+    <string name="select_all_label">Select all</string>
+    <string name="select_none_label">Select none</string>
+    <string name="profile_no_matches">No posts match these filters</string>
+    <string name="profile_download_format">Download %1$d files</string>
+    <string name="profile_saving_format">Saving %1$d of %2$d… tap to stop</string>
+    <string name="profile_saved_format">Saved %1$d files</string>
+    <string name="profile_saved_failed_format">Saved %1$d files, %2$d failed</string>
+    <string name="filter_type_all">All types</string>
+    <string name="filter_type_photos">Photos</string>
+    <string name="filter_type_videos">Videos</string>
+    <string name="filter_type_carousels">Carousels</string>
+    <string name="filter_date_any">Any date</string>
+    <string name="filter_date_week">Last 7 days</string>
+    <string name="filter_date_month">Last 30 days</string>
+    <string name="filter_date_year">This year</string>
+    <string name="filter_date_custom">Custom range…</string>
+    <string name="filter_caption">Caption</string>
+    <string name="filter_caption_format">Caption: “%1$s”</string>
+    <string name="filter_caption_title">Caption contains</string>
+    <string name="filter_caption_hint">Word, #hashtag or \@mention</string>
+    <string name="reset_filters_label">Reset</string>
+    <string name="clear_label">Clear</string>
+    <string name="cancel_label">Cancel</string>
 </resources>

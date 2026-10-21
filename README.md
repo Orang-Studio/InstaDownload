@@ -1,62 +1,164 @@
 # InstaDownload
 
-An Android only app for downloading Instagram videos directly to your phone.  
+A privacy-friendly Android app for downloading public Instagram reels, photos, videos, and carousel posts.
 
+**No login, ads, tracking for public content. Fully open source.**
 <p align="center">
-<a href="https://www.star-history.com/?repos=Orang-Studio%2FInstaDownload&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Orang-Studio/InstaDownload&type=date&legend=top-left" />
- </picture>
-</a>
+  <a href="https://play.google.com/store/apps/details?id=com.vakarux.instadownload">
+    <img src="https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png" alt="Get InstaDownload on Gplay" height="80">
+  &nbsp;
+  <a href="https://f-droid.org/packages/com.vakarux.instadownload">
+    <img src="https://f-droid.org/badge/get-it-on.png" alt="Get InstaDownload on F-Droid" height="80">
+  </a>
+  &nbsp;
+  <a href="https://github.com/Orang-Studio/InstaDownload/releases">
+    <img src="img/badge_github.png" alt="Download InstaDownload from GitHub" height="80">
+  </a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Orang-Studio/InstaDownload/actions/workflows/build.yml">
-    <img src="https://github.com/Orang-Studio/InstaDownload/actions/workflows/build.yml/badge.svg" alt="Build status"/>
+    <img src="https://github.com/Orang-Studio/InstaDownload/actions/workflows/build.yml/badge.svg" alt="Build status">
   </a>
   <a href="https://github.com/Orang-Studio/InstaDownload/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Orang-Studio/InstaDownload?label=Download%20app&amp;color=2563eb" alt="Download app" />
+    <img src="https://img.shields.io/github/v/release/Orang-Studio/InstaDownload?label=Latest%20release&color=2563eb" alt="Latest release">
+  </a>
+  <a href="https://github.com/Orang-Studio/InstaDownload/releases">
+    <img src="https://img.shields.io/github/downloads/Orang-Studio/InstaDownload/total.svg?label=Downloads" alt="Total downloads">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/Orang-Studio/InstaDownload" alt="GPLv3 License">
   </a>
 </p>
 
 ## Features
--  Paste an Instagram URL and download the video directly.
--  Everything runs locally on your device.
--  Videos are saved to your device storage.
 
+- Download Instagram photos, reels, and videos.
+- Download every photo or video from carousel posts.
+- Paste a link and save the media directly to your device.
+- Quick download by sharing to the app without opening it.
+- **No ads**, analytics, or tracking.
+- No third-party download service.
+- **No Instagram login** required for public content.
+- Fully open source under the GPLv3 License.
+- Works on Android 17!
 
+> [!IMPORTANT]
+> The **Stories version, NOT MAIN VERSION** requires you to log in to Instagram (OPTIONAL FOR REELS). Only download it from the official [InstaDownload releases page](https://github.com/Orang-Studio/InstaDownload/releases).
 
 ## Screenshots
+
 <p align="center">
-  <img src="/img/lighttheme.png" width="250" alt="Light theme" />
-  <img src="/img/darktheme.png" width="250" alt="Dark theme" />
+  <img src="img/lighttheme.png" width="250" alt="InstaDownload light theme">
+  <img src="img/darktheme.png" width="250" alt="InstaDownload dark theme">
 </p>
-<p align="center">Light theme&nbsp;&nbsp;&nbsp;&nbsp;Dark theme</p>
 
+## Speed comparison
 
+<p align="center">
+  <img src="img/speed_comparison.gif" width="400" alt="InstaDownload vs InSaver download speed comparison"><br>
+  <sub>InstaDownload: 6.70s &nbsp;·&nbsp; InSaver: 35.27s</sub>
+</p>
 
 ## Usage
 
-1. Copy an Instagram URL (must be a public post)
-2. Open **InstaDownload** and paste the link
-3. Tap **Download**
-4. Video is saved in your Downloads folder
+Method 1:
+1. Press Share in Instagram
+2. Find InstaDownload in the list
+3. Choose either to open the app or to use Quick share
+4. Press download (skip if quick share is chosen)
+
+Method 2:
+1. Copy the URL of an Instagram post, reel, or video.
+2. Open **InstaDownload**.
+3. Paste the URL.
+4. Tap **Download**.
+5. Find the downloaded media in your device's `Downloads` folder.
 
 
+
+<details>
+<summary><strong>Supported Instagram links</strong></summary>
+
+<br>
+
+InstaDownload supports public links containing:
+
+- `instagram.com/p/`
+- `instagram.com/reel/`
+- `instagram.com/tv/`
+`tv is deprecated link type`
+
+The Stories version additionally supports Instagram Stories and private posts your account has permission to view.
+
+</details>
+
+<details>
+<summary><strong>App permissions</strong></summary>
+
+<br>
+
+InstaDownload may request the following Android permissions:
+
+- Internet - Retrieve media from Instagram
+- Storage - Save files on older Android versions
+- Notifications - Show download completion alerts
+- Vibration - Provide haptic feedback
+
+The standard version does not require an Instagram account or login.
+
+</details>
+
+## Privacy
+
+InstaDownload does not include:
+
+- Advertisements
+- Analytics
+- User tracking
+- Paid features
+- A third-party download server
+
+Media processing and file saving happen directly on your device.
 
 ## Disclaimer
 
-This project is for **educational purposes**.
-Respect Instagram’s [Terms of Service](https://help.instagram.com/581066165581870) and only download content you have rights to.
+> [!CAUTION]
+> Only download media that you own or have permission to save. Respect copyright, content creators' privacy, and Instagram's [Terms of Service](https://help.instagram.com/581066165581870).
 
-## Wiki
+This project is provided for educational and personal use.
 
-If you need wiki for some reason then [WIKI](https://github.com/Orang-Studio/InstaDownload/wiki)
+InstaDownload is not affiliated with, endorsed by, or associated with Instagram or Meta.
 
+## Help and documentation
 
+Additional information is available in the project [Wiki](https://github.com/Orang-Studio/InstaDownload/wiki).
 
-## License
+For bugs or feature requests, use [GitHub Issues](https://github.com/Orang-Studio/InstaDownload/issues).
 
-GPLv3 License – see [LICENSE](LICENSE) for details.
+## Star History
+
+<p align="center">
+  <a href="https://www.star-history.com/#Orang-Studio/InstaDownload&Date">
+    <picture>
+      <source
+        media="(prefers-color-scheme: dark)"
+        srcset="https://api.star-history.com/svg?repos=Orang-Studio/InstaDownload&type=Date&theme=dark"
+      >
+      <source
+        media="(prefers-color-scheme: light)"
+        srcset="https://api.star-history.com/svg?repos=Orang-Studio/InstaDownload&type=Date"
+      >
+      <img
+        src="https://api.star-history.com/svg?repos=Orang-Studio/InstaDownload&type=Date"
+        alt="InstaDownload star history chart"
+      >
+    </picture>
+  </a>
+</p>
+
+## Info
+- Platform: Android; IOS
+- Official Source Stores: Github; Fdroid; Gplay
+- InstaDownload is available under the [GPLv3 License](LICENSE)
+- Made by human and AI for API reverse engineering 🧡

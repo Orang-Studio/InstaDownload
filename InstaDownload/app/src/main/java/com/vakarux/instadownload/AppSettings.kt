@@ -21,25 +21,34 @@ enum class AppTheme(@StringRes val labelRes: Int) {
 class AppSettings(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+
     var downloadTreeUri: String?
         get() = prefs.getString("download_tree_uri", null)
         set(value) = prefs.edit().putString("download_tree_uri", value).apply()
+
     var downloadFolderName: String
         get() = prefs.getString("download_folder_name", null) ?: DEFAULT_FOLDER_NAME
         set(value) = prefs.edit().putString("download_folder_name", value).apply()
-    var quality: DownloadQuality
-        get() = enumValue(prefs.getString("quality", null), DownloadQuality.AUTO)
-        set(value) = prefs.edit().putString("quality", value.name).apply()
+
     var hapticsEnabled: Boolean
         get() = prefs.getBoolean("haptics", true)
         set(value) = prefs.edit().putBoolean("haptics", value).apply()
+
     var theme: AppTheme
         get() = enumValue(prefs.getString("theme", null), AppTheme.SYSTEM)
         set(value) = prefs.edit().putString("theme", value.name).apply()
 
+    var quality: DownloadQuality
+        get() = enumValue(prefs.getString("quality", null), DownloadQuality.AUTO)
+        set(value) = prefs.edit().putString("quality", value.name).apply()
+
     var customWidth: Int
         get() = prefs.getInt("custom_width", 720)
         set(value) = prefs.edit().putInt("custom_width", value).apply()
+
+    var profileQuery: String?
+        get() = prefs.getString("profile_query", null)
+        set(value) = prefs.edit().putString("profile_query", value).apply()
 
     fun targetWidth(): Int = when (effectiveQuality()) {
         DownloadQuality.DATA_SAVER -> 0
@@ -54,6 +63,7 @@ class AppSettings(context: Context) {
             connectivity.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
         return if (dataSaverOn) DownloadQuality.DATA_SAVER else DownloadQuality.BEST
     }
+
     private inline fun <reified T : Enum<T>> enumValue(value: String?, fallback: T): T =
         runCatching { enumValueOf<T>(value ?: "") }.getOrDefault(fallback)
 

@@ -2,25 +2,26 @@ package com.vakarux.instadownload
 
 import android.Manifest
 import android.content.ClipboardManager
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.DocumentsContract
-import android.provider.MediaStore
+import android.text.format.DateUtils
+import android.text.format.Formatter
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -60,10 +61,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.regex.Pattern
+import kotlin.math.roundToLong
 
 // Instagram brand gradient colors
 private val IgPurple = Color(0xFF833AB4)
-private val IgPink   = Color(0xFFE1306C)
+internal val IgPink   = Color(0xFFE1306C)
 private val IgOrange = Color(0xFFF77737)
 
 // Dark equivalents (desaturated per MD3 dark mode guidance)
@@ -75,6 +77,7 @@ class MainActivity : ComponentActivity() {
 
     private val appSettings by lazy { AppSettings(this) }
     private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
+    private val showLibrary = mutableStateOf(false)
     private class SharedUrl(val url: String)
     private val sharedUrl = mutableStateOf(SharedUrl(""))
 
@@ -84,7 +87,8 @@ class MainActivity : ComponentActivity() {
         uri ?: return@registerForActivityResult
         runCatching {
             contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
         }
         val name = runCatching { DocumentsContract.getTreeDocumentId(uri).substringAfterLast(':') }
@@ -110,6 +114,7 @@ class MainActivity : ComponentActivity() {
         loggedIn.value = sessionStore.isLoggedIn
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
+        showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
 
         setContent {
             val settings = appSettings
@@ -134,8 +139,13 @@ class MainActivity : ComponentActivity() {
                     selectedFolderName = selectedFolderName.value,
                     onChooseFolder = { folderPickerLauncher.launch(null) },
                     onThemeChanged = { selectedTheme = it },
-                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME }
+                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
+                    onOpenLibrary = { showLibrary.value = true },
+                    onDownloadsSaved = { showLibrary.value = true }
                 )
+                if (showLibrary.value) {
+                    DownloadsDialog(onDismiss = { showLibrary.value = false })
+                }
             }
         }
     }
@@ -144,6 +154,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
+        if (intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)) showLibrary.value = true
     }
 
     private fun handleSharedIntent(intent: Intent): String {
@@ -167,7 +178,9 @@ class MainActivity : ComponentActivity() {
         selectedFolderName: String = settings.downloadFolderName,
         onChooseFolder: () -> Unit = {},
         onThemeChanged: (AppTheme) -> Unit = {},
-        onFolderAccessLost: () -> Unit = {}
+        onFolderAccessLost: () -> Unit = {},
+        onOpenLibrary: () -> Unit = {},
+        onDownloadsSaved: () -> Unit = {}
     ) {
         var url by remember { mutableStateOf(initialUrl) }
         var isLoading by remember { mutableStateOf(false) }
@@ -178,6 +191,8 @@ class MainActivity : ComponentActivity() {
         var deselectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
+        var targetWidth by remember { mutableIntStateOf(settings.targetWidth()) }
+        var profileToBrowse by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(initialUrlKey) {
             if (initialUrl.isNotBlank()) {
@@ -194,8 +209,7 @@ class MainActivity : ComponentActivity() {
         val colorScheme = MaterialTheme.colorScheme
         val uriHandler = LocalUriHandler.current
 
-        val isStory = isStoryUrl(url.trim())
-        val needsLogin = isStory && !isLoggedIn
+        val needsLogin = isStoryUrl(url.trim()) && !isLoggedIn
 
         val igGradient = Brush.verticalGradient(
             colors = if (useDarkTheme) {
@@ -205,9 +219,10 @@ class MainActivity : ComponentActivity() {
             }
         )
 
-        LaunchedEffect(url, isLoggedIn) {
+        LaunchedEffect(url, targetWidth, isLoggedIn) {
             val trimmed = url.trim()
-            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || needsLogin) {
+            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || needsLogin ||
+                InstagramDownloader.isProfileUrl(trimmed)) {
                 media = null
                 return@LaunchedEffect
             }
@@ -220,9 +235,7 @@ class MainActivity : ComponentActivity() {
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(
-                        trimmed, sessionStore.session, settings.targetWidth()
-                    )
+                    InstagramDownloader.getMediaItems(trimmed, targetWidth, sessionStore.session)
                 }
             }
             isLoading = false
@@ -234,16 +247,21 @@ class MainActivity : ComponentActivity() {
             media = items.getOrThrow()
         }
 
-        if (showSettings) SettingsDialog(
-            settings = settings,
-            selectedFolderName = selectedFolderName,
-            onChooseFolder = onChooseFolder,
-            isLoggedIn = isLoggedIn,
-            onLoginClick = onLoginClick,
-            onLogoutClick = onLogoutClick,
-            onThemeChanged = onThemeChanged,
-            onDismiss = { showSettings = false }
-        )
+        if (showSettings) {
+            SettingsDialog(
+                settings = settings,
+                selectedFolderName = selectedFolderName,
+                onChooseFolder = onChooseFolder,
+                isLoggedIn = isLoggedIn,
+                onLoginClick = onLoginClick,
+                onLogoutClick = onLogoutClick,
+                onThemeChanged = onThemeChanged,
+                onDismiss = {
+                    showSettings = false
+                    targetWidth = settings.targetWidth()
+                }
+            )
+        }
 
         Scaffold(
             containerColor = Color.Transparent,
@@ -460,16 +478,15 @@ class MainActivity : ComponentActivity() {
                                         urlError = context.getString(R.string.error_invalid_url)
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
+                                    InstagramDownloader.isProfileUrl(trimmed) ->
+                                        profileToBrowse = InstagramDownloader.extractProfileUsername(trimmed)
                                     else -> coroutineScope.launch {
                                         fullError = null
                                         val items = media ?: run {
                                             isLoading = true
                                             val fetched = runCatching {
                                                 withContext(Dispatchers.IO) {
-                                                    InstagramDownloader.getMediaItems(
-                                                        trimmed, sessionStore.session,
-                                                        settings.targetWidth()
-                                                    )
+                                                    InstagramDownloader.getMediaItems(trimmed, settings.targetWidth(), sessionStore.session)
                                                 }
                                             }
                                             isLoading = false
@@ -488,15 +505,9 @@ class MainActivity : ComponentActivity() {
                                         var fellBackToDefaultFolder = false
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
-                                                itemsToSave.forEachIndexed { i, item ->
-                                                    try {
-                                                        saveToDownloads(item.url, item.isVideo, i, context, settings.downloadTreeUri)
-                                                    } catch (e: Exception) {
-                                                        if (settings.downloadTreeUri == null) throw e
-                                                        settings.downloadTreeUri = null
-                                                        settings.downloadFolderName = AppSettings.DEFAULT_FOLDER_NAME
+                                                itemsToSave.forEach { item ->
+                                                    if (saveToDownloads(item, context, settings).fellBackToDefaultFolder) {
                                                         fellBackToDefaultFolder = true
-                                                        saveToDownloads(item.url, item.isVideo, i, context, null)
                                                     }
                                                 }
                                             }
@@ -515,6 +526,7 @@ class MainActivity : ComponentActivity() {
                                             downloadComplete = false
                                             media = null
                                             deselectedIndices = emptySet()
+                                            onDownloadsSaved()
                                         } else {
                                             fullError = dlResult.exceptionOrNull()?.message
                                                 ?: context.getString(R.string.error_download_failed)
@@ -566,14 +578,15 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 else -> {
+                                    val isProfile = InstagramDownloader.isProfileUrl(url.trim())
                                     Icon(
-                                        imageVector = AppIcons.Download,
+                                        imageVector = if (isProfile) AppIcons.Image else AppIcons.Download,
                                         contentDescription = null,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        stringResource(R.string.download_label),
+                                        stringResource(if (isProfile) R.string.open_profile_label else R.string.download_label),
                                         style = MaterialTheme.typography.labelLarge.copy(
                                             fontWeight = FontWeight.Bold
                                         )
@@ -746,9 +759,18 @@ class MainActivity : ComponentActivity() {
             }
 
             Row(
-                modifier = Modifier.padding(innerPadding).fillMaxWidth().padding(8.dp),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxWidth()
+                    .padding(8.dp),
                 horizontalArrangement = Arrangement.End
             ) {
+                TextButton(onClick = onOpenLibrary) {
+                    Text(
+                        stringResource(R.string.downloads_label),
+                        color = Color.White
+                    )
+                }
                 IconButton(
                     onClick = { showSettings = true },
                     colors = IconButtonDefaults.iconButtonColors(
@@ -758,6 +780,20 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Icon(AppIcons.Settings, contentDescription = stringResource(R.string.settings_content_description))
                 }
+            }
+        }
+
+        profileToBrowse?.let { username ->
+            AnimatedVisibility(
+                visibleState = remember { MutableTransitionState(false) }.apply { targetState = true },
+                enter = slideInVertically(tween(250)) { it / 4 } + fadeIn(tween(250))
+            ) {
+                ProfileBrowser(
+                    username = username,
+                    settings = settings,
+                    onFolderAccessLost = onFolderAccessLost,
+                    onClose = { profileToBrowse = null }
+                )
             }
         }
     }
@@ -838,6 +874,7 @@ class MainActivity : ComponentActivity() {
         var customWidth by remember { mutableIntStateOf(settings.customWidth) }
         var haptics by remember { mutableStateOf(settings.hapticsEnabled) }
         var theme by remember { mutableStateOf(settings.theme) }
+
         AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.settings_title)) },
@@ -894,7 +931,7 @@ class MainActivity : ComponentActivity() {
                                 readOnly = true,
                                 label = { Text(stringResource(R.string.resolution_label)) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                                modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             )
                             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                 listOf(1080, 720, 640, 480, 320, 240).forEach { width ->
@@ -919,9 +956,13 @@ class MainActivity : ComponentActivity() {
                             Text(stringResource(R.string.haptic_feedback_label), style = MaterialTheme.typography.bodyLarge)
                             Text(stringResource(R.string.haptic_feedback_description), style = MaterialTheme.typography.bodySmall)
                         }
-                        Switch(haptics, onCheckedChange = {
-                            haptics = it; settings.hapticsEnabled = it
-                        })
+                        Switch(
+                            checked = haptics,
+                            onCheckedChange = {
+                                haptics = it
+                                settings.hapticsEnabled = it
+                            }
+                        )
                     }
                     AppTheme.entries.forEach { option ->
                         SettingsRadio(stringResource(option.labelRes), null, theme == option) {
@@ -938,22 +979,31 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun SettingsHeading(text: String) {
-        Text(text, style = MaterialTheme.typography.labelLarge,
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+        )
     }
 
     @Composable
     private fun SettingsRadio(
-        title: String, description: String?, selected: Boolean, onClick: () -> Unit
+        title: String,
+        description: String?,
+        selected: Boolean,
+        onClick: () -> Unit
     ) {
         Row(
-            Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RadioButton(selected, onClick = onClick)
-            Column(Modifier.padding(start = 8.dp)) {
-                Text(title)
+            RadioButton(selected = selected, onClick = onClick)
+            Column(modifier = Modifier.padding(start = 8.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
                 description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         }
@@ -982,7 +1032,19 @@ class MainActivity : ComponentActivity() {
             if (bmp == null) loadFailed = true
             value = bmp
         }
+        val context = LocalContext.current
+        val sizeBytes by produceState(-1L, item.url) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { InstagramDownloader.contentLength(item.url) }.getOrDefault(-1L)
+            }
+        }
+        val meta = listOfNotNull(
+            item.takeIf { it.width in 1 until Int.MAX_VALUE && it.height > 0 }?.let { "${it.width}×${it.height}" },
+            item.durationSec.takeIf { it > 0 }?.let { DateUtils.formatElapsedTime(it.roundToLong()) },
+            sizeBytes.takeIf { it > 0 }?.let { Formatter.formatShortFileSize(context, it) }
+        )
 
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(modifier = Modifier.size(width = 120.dp, height = 158.dp)) {
             Box(
                 modifier = Modifier
@@ -1045,56 +1107,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-    }
-
-    // ── Download logic ─────────────────────────────────────────────
-
-    private fun saveToDownloads(
-        mediaUrl: String, isVideo: Boolean, index: Int, context: Context,
-        downloadTreeUri: String?
-    ) {
-        val ts = System.currentTimeMillis() + index
-        val fileName = if (isVideo) "instagram_video_$ts.mp4" else "instagram_image_$ts.jpg"
-        val mimeType = if (isVideo) "video/mp4" else "image/jpeg"
-
-        if (downloadTreeUri != null) {
-            val treeUri = Uri.parse(downloadTreeUri)
-            val parent = DocumentsContract.buildDocumentUriUsingTree(
-                treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+        if (meta.isNotEmpty()) {
+            Text(
+                meta.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                modifier = Modifier.width(120.dp).padding(top = 4.dp)
             )
-            val fileUri = DocumentsContract.createDocument(
-                context.contentResolver, parent, mimeType, fileName
-            ) ?: throw Exception(context.getString(R.string.error_create_file_in_folder))
-            context.contentResolver.openOutputStream(fileUri)?.use { out ->
-                InstagramDownloader.downloadToStream(mediaUrl, out)
-            } ?: throw Exception(context.getString(R.string.error_write_to_folder))
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/InstaDownload")
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-            val resolver = context.contentResolver
-            val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            val uri = resolver.insert(collection, values)
-                ?: throw Exception(context.getString(R.string.error_create_file_in_downloads))
-            resolver.openOutputStream(uri)?.use { out ->
-                InstagramDownloader.downloadToStream(mediaUrl, out)
-            }
-            values.clear()
-            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-            resolver.update(uri, values, null, null)
-        } else {
-            try {
-                val dir = java.io.File(
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "InstaDownload"
-                ).apply { mkdirs() }
-                val file = java.io.File(dir, fileName)
-                InstagramDownloader.downloadToStream(mediaUrl, file.outputStream())
-            } catch (e: SecurityException) {
-                throw Exception(context.getString(R.string.error_storage_permission_lost), e)
-            }
+        }
         }
     }
 
@@ -1105,8 +1127,8 @@ class MainActivity : ComponentActivity() {
 
     private fun isStoryUrl(url: String): Boolean =
         Pattern.compile(
-            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+/?.*"
-        ).matcher(url).matches()
+            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+"
+        ).matcher(url).find()
 
     private fun checkPermissions(): Boolean =
         ContextCompat.checkSelfPermission(
@@ -1170,6 +1192,10 @@ class MainActivity : ComponentActivity() {
         } else {
             context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
+
+    companion object {
+        const val EXTRA_OPEN_LIBRARY = "com.vakarux.instadownload.extra.OPEN_LIBRARY"
+    }
 }
 
 @Preview(showBackground = true)

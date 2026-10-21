@@ -1,0 +1,1 @@
+* Reverted package name back to com.vakarux.instadownload to restore F-Droid builds
