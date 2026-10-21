@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
 
     private val appSettings by lazy { AppSettings(this) }
     private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
+    private val showLibrary = mutableStateOf(false)
     private class SharedUrl(val url: String)
     private val sharedUrl = mutableStateOf(SharedUrl(""))
 
@@ -103,6 +104,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
+        showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
 
         setContent {
             val settings = appSettings
@@ -121,8 +123,13 @@ class MainActivity : ComponentActivity() {
                     selectedFolderName = selectedFolderName.value,
                     onChooseFolder = { folderPickerLauncher.launch(null) },
                     onThemeChanged = { selectedTheme = it },
-                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME }
+                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
+                    onOpenLibrary = { showLibrary.value = true },
+                    onDownloadsSaved = { showLibrary.value = true }
                 )
+                if (showLibrary.value) {
+                    DownloadsDialog(onDismiss = { showLibrary.value = false })
+                }
             }
         }
     }
@@ -131,6 +138,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
+        if (intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)) showLibrary.value = true
     }
 
     private fun handleSharedIntent(intent: Intent): String {
@@ -151,7 +159,9 @@ class MainActivity : ComponentActivity() {
         selectedFolderName: String = settings.downloadFolderName,
         onChooseFolder: () -> Unit = {},
         onThemeChanged: (AppTheme) -> Unit = {},
-        onFolderAccessLost: () -> Unit = {}
+        onFolderAccessLost: () -> Unit = {},
+        onOpenLibrary: () -> Unit = {},
+        onDownloadsSaved: () -> Unit = {}
     ) {
         var url by remember { mutableStateOf(initialUrl) }
         var isLoading by remember { mutableStateOf(false) }
@@ -441,7 +451,7 @@ class MainActivity : ComponentActivity() {
                                         val dlResult = runCatching {
                                             withContext(Dispatchers.IO) {
                                                 itemsToSave.forEach { item ->
-                                                    if (saveToDownloads(item, context, settings)) {
+                                                    if (saveToDownloads(item, context, settings).fellBackToDefaultFolder) {
                                                         fellBackToDefaultFolder = true
                                                     }
                                                 }
@@ -461,6 +471,7 @@ class MainActivity : ComponentActivity() {
                                             downloadComplete = false
                                             media = null
                                             deselectedIndices = emptySet()
+                                            onDownloadsSaved()
                                         } else {
                                             fullError = dlResult.exceptionOrNull()?.message
                                                 ?: context.getString(R.string.error_download_failed)
@@ -698,6 +709,12 @@ class MainActivity : ComponentActivity() {
                     .padding(8.dp),
                 horizontalArrangement = Arrangement.End
             ) {
+                TextButton(onClick = onOpenLibrary) {
+                    Text(
+                        stringResource(R.string.downloads_label),
+                        color = Color.White
+                    )
+                }
                 IconButton(
                     onClick = { showSettings = true },
                     colors = IconButtonDefaults.iconButtonColors(
@@ -824,7 +841,7 @@ class MainActivity : ComponentActivity() {
                                 readOnly = true,
                                 label = { Text(stringResource(R.string.resolution_label)) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                                modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             )
                             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                 listOf(1080, 720, 640, 480, 320, 240).forEach { width ->
@@ -1085,6 +1102,10 @@ class MainActivity : ComponentActivity() {
         } else {
             context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
+
+    companion object {
+        const val EXTRA_OPEN_LIBRARY = "com.vakarux.instadownload.extra.OPEN_LIBRARY"
+    }
 }
 
 @Preview(showBackground = true)

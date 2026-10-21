@@ -80,7 +80,8 @@ class QuickDownloadService : Service() {
         val settings = AppSettings(this)
         val items = InstagramDownloader.getMediaItems(url, settings.targetWidth())
         if (items.isEmpty()) throw Exception(getString(R.string.error_download_failed))
-        return items.map { saveToDownloads(it, this, settings) }.any { it }
+        return items.map { saveToDownloads(it, this, settings).fellBackToDefaultFolder }
+            .any { it }
     }
 
     private fun createNotificationChannel() {
@@ -109,7 +110,7 @@ class QuickDownloadService : Service() {
             .setSmallIcon(R.drawable.download)
             .setContentTitle(title)
             .setContentText(text)
-            .setContentIntent(mainActivityPendingIntent())
+            .setContentIntent(mainActivityPendingIntent(!ongoing))
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
             .setOnlyAlertOnce(true)
@@ -119,9 +120,10 @@ class QuickDownloadService : Service() {
             }
             .build()
 
-    private fun mainActivityPendingIntent(): PendingIntent {
+    private fun mainActivityPendingIntent(openLibrary: Boolean): PendingIntent {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_OPEN_LIBRARY, openLibrary)
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0

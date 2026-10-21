@@ -9,29 +9,37 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 
-internal fun saveToDownloads(item: MediaResult, context: Context, settings: AppSettings): Boolean {
-    try {
-        saveTo(item, context, settings.downloadTreeUri)
-        return false
+internal data class SaveOutcome(val fellBackToDefaultFolder: Boolean)
+
+internal fun saveToDownloads(item: MediaResult, context: Context, settings: AppSettings): SaveOutcome {
+    val base = item.baseName.ifBlank { "instagram_${System.currentTimeMillis()}" }
+    val fileName = if (item.isVideo) "$base.mp4" else "$base.jpg"
+    val mimeType = if (item.isVideo) "video/mp4" else "image/jpeg"
+    val (uri, fellBack) = try {
+        saveTo(item, context, settings.downloadTreeUri, fileName, mimeType) to false
     } catch (e: Exception) {
         if (settings.downloadTreeUri == null) throw e
         settings.downloadTreeUri = null
         settings.downloadFolderName = AppSettings.DEFAULT_FOLDER_NAME
-        saveTo(item, context, null)
-        return true
+        saveTo(item, context, null, fileName, mimeType) to true
     }
+    DownloadHistory.add(context, DownloadRecord(
+        uri.toString(), fileName, mimeType, System.currentTimeMillis(), item.meta,
+        item.width.takeIf { it < Int.MAX_VALUE } ?: 0, item.height, item.durationSec
+    ))
+    return SaveOutcome(fellBack)
 }
 
 private fun saveTo(
     item: MediaResult,
     context: Context,
-    downloadTreeUri: String?
-) {
+    downloadTreeUri: String?,
+    fileName: String,
+    mimeType: String
+): Uri {
     val mediaUrl = item.url
     val isVideo = item.isVideo
-    val base = item.baseName.ifBlank { "instagram_${System.currentTimeMillis()}" }
-    val fileName = if (isVideo) "$base.mp4" else "$base.jpg"
-    val mimeType = if (isVideo) "video/mp4" else "image/jpeg"
+    val base = fileName.substringBeforeLast('.')
 
     if (downloadTreeUri != null) {
         val treeUri = Uri.parse(downloadTreeUri)
@@ -47,6 +55,7 @@ private fun saveTo(
         if (!isVideo) tagJpeg(item.meta) {
             context.contentResolver.openFileDescriptor(fileUri, "rw")?.use(it)
         }
+        return fileUri
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -69,6 +78,7 @@ private fun saveTo(
         values.clear()
         values.put(MediaStore.MediaColumns.IS_PENDING, 0)
         resolver.update(uri, values, null, null)
+        return uri
     } else {
         try {
             val dir = java.io.File(
@@ -79,6 +89,7 @@ private fun saveTo(
             if (!isVideo) tagJpeg(item.meta) {
                 ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE).use(it)
             }
+            return Uri.fromFile(file)
         } catch (e: SecurityException) {
             throw Exception(context.getString(R.string.error_storage_permission_lost), e)
         }
