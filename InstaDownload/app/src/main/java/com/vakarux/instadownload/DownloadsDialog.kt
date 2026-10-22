@@ -1,7 +1,11 @@
 package com.vakarux.instadownload
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.widget.Toast
@@ -12,6 +16,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -24,10 +30,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -66,6 +75,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
@@ -73,6 +83,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,7 +108,7 @@ private enum class DownloadKind(val labelRes: Int) {
 private val DownloadRecord.kind: DownloadKind
     get() = when {
         meta?.url?.contains("/stories/") == true -> DownloadKind.STORIES
-        meta?.url?.contains("/reel") == true -> DownloadKind.REELS
+        meta?.url?.contains("/reel/") == true || meta?.url?.contains("/reels/") == true -> DownloadKind.REELS
         else -> DownloadKind.POSTS
     }
 
@@ -134,6 +145,17 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.weight(1f).padding(start = 20.dp, top = 16.dp, bottom = 12.dp)
                     )
+                    if (previewRecord == null) {
+                        IconButton(
+                            onClick = { records = DownloadHistory.load(context) },
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Refresh,
+                                contentDescription = stringResource(R.string.refresh_downloads_label)
+                            )
+                        }
+                    }
                     TextButton(onClick = {
                         if (previewRecord == null) onDismiss() else previewRecord = null
                     }, modifier = Modifier.padding(top = 8.dp, end = 12.dp)) {
@@ -165,15 +187,40 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
                         selectedKind == DownloadKind.ALL || it.kind == selectedKind
                     }
                     if (visibleRecords.isEmpty()) {
-                        Text(
-                            if (records.isEmpty()) stringResource(R.string.downloads_empty)
-                            else stringResource(
-                                R.string.downloads_empty_kind,
-                                stringResource(selectedKind.labelRes)
-                            ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(32.dp)
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = AppIcons.VideoLibrary,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(56.dp)
+                                )
+                                Text(
+                                    if (records.isEmpty()) stringResource(R.string.downloads_empty)
+                                    else stringResource(
+                                        R.string.downloads_empty_kind,
+                                        stringResource(selectedKind.labelRes)
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(top = 16.dp)
+                                )
+                                if (records.isEmpty()) {
+                                    Text(
+                                        stringResource(R.string.downloads_empty_hint),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(top = 6.dp)
+                                    )
+                                }
+                            }
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -198,6 +245,7 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DownloadRow(
     record: DownloadRecord,
@@ -205,7 +253,13 @@ private fun DownloadRow(
     onDeleted: () -> Unit
 ) {
     val context = LocalContext.current
+    val hapticFeedback = LocalHapticFeedback.current
     val uriHandler = LocalUriHandler.current
+    val handleClipboardLabel = stringResource(R.string.handle_clipboard_label)
+    val captionClipboardLabel = stringResource(R.string.caption_clipboard_label)
+    var captionExpanded by remember(record.uri) { mutableStateOf(false) }
+    var captionHasOverflow by remember(record.uri) { mutableStateOf(false) }
+    val captionScrollState = rememberScrollState()
     val exists by produceState<Boolean?>(null, record.uri) {
         value = withContext(Dispatchers.IO) { DownloadedFiles.exists(context, record) }
     }
@@ -213,6 +267,8 @@ private fun DownloadRow(
         value = withContext(Dispatchers.IO) { DownloadedFiles.sizeBytes(context, record) }
     }
     val meta = record.meta
+    val username = meta?.username?.takeIf { it.isNotBlank() }
+    val caption = meta?.caption?.takeIf { it.isNotBlank() }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -225,18 +281,70 @@ private fun DownloadRow(
                 Spacer(Modifier.size(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        meta?.username?.let { "@$it" } ?: stringResource(R.string.unknown_account),
+                        username?.let { "@$it" } ?: stringResource(R.string.unknown_account),
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.then(
+                            if (username == null) Modifier else Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    val handle = "@$username"
+                                    copyDownloadText(
+                                        context = context,
+                                        label = handleClipboardLabel,
+                                        text = handle,
+                                        confirmation = R.string.handle_copied,
+                                        hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                    )
+                                }
+                            )
+                        )
                     )
                     Text(
-                        meta?.caption ?: stringResource(R.string.no_caption),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
+                        caption ?: stringResource(R.string.no_caption),
+                        maxLines = if (captionExpanded) Int.MAX_VALUE else 3,
+                        overflow = if (captionExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp)
+                        onTextLayout = { captionHasOverflow = it.hasVisualOverflow },
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .then(
+                                if (captionExpanded) {
+                                    Modifier.heightIn(max = 160.dp).verticalScroll(captionScrollState)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .then(
+                                if (caption == null) Modifier else Modifier.combinedClickable(
+                                    onClick = { captionExpanded = !captionExpanded },
+                                    onLongClick = {
+                                        copyDownloadText(
+                                            context = context,
+                                            label = captionClipboardLabel,
+                                            text = caption,
+                                            confirmation = R.string.caption_copied,
+                                            hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                        )
+                                    }
+                                )
+                            )
                     )
+                    if (caption != null && (captionHasOverflow || captionExpanded)) {
+                        TextButton(
+                            onClick = { captionExpanded = !captionExpanded },
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.heightIn(min = 28.dp)
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (captionExpanded) R.string.show_less_label else R.string.show_more_label
+                                ),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
                     val details = listOfNotNull(
                         meta?.song,
                         meta?.takenAtSec?.takeIf { it > 0 }
@@ -382,20 +490,75 @@ private fun ColumnScope.MediaFrame(fullscreen: Boolean = false, content: @Compos
     ) { content() }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MediaPreview(record: DownloadRecord, fullscreen: Boolean, onFullscreenChange: (Boolean) -> Unit) {
     val context = LocalContext.current
+    val hapticFeedback = LocalHapticFeedback.current
+    val uriHandler = LocalUriHandler.current
+    val handleClipboardLabel = stringResource(R.string.handle_clipboard_label)
+    val captionClipboardLabel = stringResource(R.string.caption_clipboard_label)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (record.mimeType.startsWith("video/")) VideoPreview(record, fullscreen, onFullscreenChange)
         else ImagePreview(record)
         if (fullscreen) return@Column
-        record.meta?.caption?.let {
+        val meta = record.meta
+        val username = meta?.username?.takeIf { it.isNotBlank() }
+        val caption = meta?.caption?.takeIf { it.isNotBlank() }
+        username?.let { handle ->
             Text(
-                it,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
+                "@$handle",
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            copyDownloadText(
+                                context = context,
+                                label = handleClipboardLabel,
+                                text = "@$handle",
+                                confirmation = R.string.handle_copied,
+                                hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                            )
+                        }
+                    )
+            )
+        }
+        caption?.let { text ->
+            Text(
+                text,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 180.dp)
+                    .verticalScroll(rememberScrollState())
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            copyDownloadText(
+                                context = context,
+                                label = captionClipboardLabel,
+                                text = text,
+                                confirmation = R.string.caption_copied,
+                                hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                            )
+                        }
+                    )
+                    .padding(top = 4.dp)
+            )
+        }
+        meta?.url?.let { postUrl ->
+            Text(
+                postUrl,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .clickable { uriHandler.openUri(postUrl) }
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -577,6 +740,21 @@ private fun ColumnScope.VideoPreview(
             Modifier.fillMaxWidth().padding(top = 4.dp),
             MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+private fun copyDownloadText(
+    context: Context,
+    label: String,
+    text: String,
+    @androidx.annotation.StringRes confirmation: Int,
+    hapticFeedback: () -> Unit
+) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+    hapticFeedback()
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, confirmation, Toast.LENGTH_SHORT).show()
     }
 }
 

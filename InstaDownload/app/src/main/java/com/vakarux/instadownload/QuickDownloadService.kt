@@ -51,14 +51,16 @@ class QuickDownloadService : Service() {
                             } else {
                                 getString(R.string.quick_download_complete_text)
                             },
-                            ongoing = false
+                            ongoing = false,
+                            opensLibrary = true
                         )
                     },
                     onFailure = { error ->
                         buildNotification(
                             title = getString(R.string.quick_download_failed_title),
                             text = error.message ?: getString(R.string.error_download_failed),
-                            ongoing = false
+                            ongoing = false,
+                            opensLibrary = false
                         )
                     }
                 )
@@ -105,12 +107,17 @@ class QuickDownloadService : Service() {
         }
     }
 
-    private fun buildNotification(title: String, text: String, ongoing: Boolean) =
+    private fun buildNotification(
+        title: String,
+        text: String,
+        ongoing: Boolean,
+        opensLibrary: Boolean = false
+    ) =
         NotificationCompat.Builder(this, if (ongoing) CHANNEL_ID else RESULT_CHANNEL_ID)
             .setSmallIcon(R.drawable.download)
             .setContentTitle(title)
             .setContentText(text)
-            .setContentIntent(mainActivityPendingIntent(!ongoing))
+            .setContentIntent(mainActivityPendingIntent(opensLibrary))
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
             .setOnlyAlertOnce(true)
@@ -127,7 +134,7 @@ class QuickDownloadService : Service() {
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        return PendingIntent.getActivity(this, 0, intent, flags)
+        return PendingIntent.getActivity(this, if (openLibrary) 1 else 0, intent, flags)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

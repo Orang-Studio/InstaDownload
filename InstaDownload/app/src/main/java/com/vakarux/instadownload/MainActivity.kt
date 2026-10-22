@@ -191,6 +191,11 @@ class MainActivity : ComponentActivity() {
         val coroutineScope = rememberCoroutineScope()
         val colorScheme = MaterialTheme.colorScheme
         val uriHandler = LocalUriHandler.current
+        val genericError = stringResource(R.string.error_generic)
+        val emptyUrlError = stringResource(R.string.error_empty_url)
+        val invalidUrlError = stringResource(R.string.error_invalid_url)
+        val folderAccessLostError = stringResource(R.string.error_folder_access_lost)
+        val downloadFailedError = stringResource(R.string.error_download_failed)
 
         val isStory = isStoryUrl(url.trim())
 
@@ -223,7 +228,7 @@ class MainActivity : ComponentActivity() {
             }
             isLoading = false
             if (items.isFailure) {
-                fullError = items.exceptionOrNull()?.message ?: context.getString(R.string.error_generic)
+                fullError = items.exceptionOrNull()?.message ?: genericError
                 return@LaunchedEffect
             }
             hapticStart(context, settings.hapticsEnabled)
@@ -424,9 +429,9 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 val trimmed = url.trim()
                                 when {
-                                    trimmed.isBlank() -> urlError = context.getString(R.string.error_empty_url)
+                                    trimmed.isBlank() -> urlError = emptyUrlError
                                     !isValidInstagramUrl(trimmed) ->
-                                        urlError = context.getString(R.string.error_invalid_url)
+                                        urlError = invalidUrlError
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
                                     InstagramDownloader.isProfileUrl(trimmed) ->
@@ -443,7 +448,7 @@ class MainActivity : ComponentActivity() {
                                             isLoading = false
                                             if (fetched.isFailure) {
                                                 fullError = fetched.exceptionOrNull()?.message
-                                                    ?: context.getString(R.string.error_generic)
+                                                    ?: genericError
                                                 return@launch
                                             }
                                             fetched.getOrThrow().also { media = it }
@@ -471,7 +476,7 @@ class MainActivity : ComponentActivity() {
                                             hapticComplete(context, settings.hapticsEnabled)
                                             downloadComplete = true
                                             if (fellBackToDefaultFolder) {
-                                                fullError = context.getString(R.string.error_folder_access_lost)
+                                                fullError = folderAccessLostError
                                             }
                                             delay(2500)
                                             downloadComplete = false
@@ -480,7 +485,7 @@ class MainActivity : ComponentActivity() {
                                             onDownloadsSaved()
                                         } else {
                                             fullError = dlResult.exceptionOrNull()?.message
-                                                ?: context.getString(R.string.error_download_failed)
+                                                ?: downloadFailedError
                                         }
                                     }
                                 }
