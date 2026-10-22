@@ -122,7 +122,11 @@ fun DownloadsDialog(onDismiss: () -> Unit) {
     var fullscreen by remember { mutableStateOf(false) }
 
     Dialog(
-        onDismissRequest = { if (fullscreen) fullscreen = false else onDismiss() },
+        onDismissRequest = {
+            if (fullscreen) fullscreen = false
+            else if (previewRecord != null) previewRecord = null
+            else onDismiss()
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         val view = LocalView.current
