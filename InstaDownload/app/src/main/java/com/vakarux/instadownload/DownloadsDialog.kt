@@ -6,6 +6,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.widget.Toast
@@ -75,7 +78,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
@@ -83,7 +85,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -253,7 +254,6 @@ private fun DownloadRow(
     onDeleted: () -> Unit
 ) {
     val context = LocalContext.current
-    val hapticFeedback = LocalHapticFeedback.current
     val uriHandler = LocalUriHandler.current
     val handleClipboardLabel = stringResource(R.string.handle_clipboard_label)
     val captionClipboardLabel = stringResource(R.string.caption_clipboard_label)
@@ -294,8 +294,7 @@ private fun DownloadRow(
                                         context = context,
                                         label = handleClipboardLabel,
                                         text = handle,
-                                        confirmation = R.string.handle_copied,
-                                        hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                        confirmation = R.string.handle_copied
                                     )
                                 }
                             )
@@ -324,8 +323,7 @@ private fun DownloadRow(
                                             context = context,
                                             label = captionClipboardLabel,
                                             text = caption,
-                                            confirmation = R.string.caption_copied,
-                                            hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                            confirmation = R.string.caption_copied
                                         )
                                     }
                                 )
@@ -494,7 +492,6 @@ private fun ColumnScope.MediaFrame(fullscreen: Boolean = false, content: @Compos
 @Composable
 private fun MediaPreview(record: DownloadRecord, fullscreen: Boolean, onFullscreenChange: (Boolean) -> Unit) {
     val context = LocalContext.current
-    val hapticFeedback = LocalHapticFeedback.current
     val uriHandler = LocalUriHandler.current
     val handleClipboardLabel = stringResource(R.string.handle_clipboard_label)
     val captionClipboardLabel = stringResource(R.string.caption_clipboard_label)
@@ -518,8 +515,7 @@ private fun MediaPreview(record: DownloadRecord, fullscreen: Boolean, onFullscre
                                 context = context,
                                 label = handleClipboardLabel,
                                 text = "@$handle",
-                                confirmation = R.string.handle_copied,
-                                hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                confirmation = R.string.handle_copied
                             )
                         }
                     )
@@ -540,8 +536,7 @@ private fun MediaPreview(record: DownloadRecord, fullscreen: Boolean, onFullscre
                                 context = context,
                                 label = captionClipboardLabel,
                                 text = text,
-                                confirmation = R.string.caption_copied,
-                                hapticFeedback = { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                confirmation = R.string.caption_copied
                             )
                         }
                     )
@@ -747,12 +742,25 @@ private fun copyDownloadText(
     context: Context,
     label: String,
     text: String,
-    @androidx.annotation.StringRes confirmation: Int,
-    hapticFeedback: () -> Unit
+    @androidx.annotation.StringRes confirmation: Int
 ) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
-    hapticFeedback()
+    if (AppSettings(context).hapticsEnabled) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        if (vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(35, 120))
+            } else {
+                @Suppress("DEPRECATION") vibrator.vibrate(35)
+            }
+        }
+    }
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
         Toast.makeText(context, confirmation, Toast.LENGTH_SHORT).show()
     }
