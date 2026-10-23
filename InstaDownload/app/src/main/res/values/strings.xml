@@ -44,6 +44,7 @@
     <string name="downloads_label">Downloads</string>
     <string name="downloads_title">Downloads</string>
     <string name="downloads_empty">Nothing downloaded yet.</string>
+    <string name="downloads_empty_hint">Download a reel or post to see it here.</string>
     <string name="downloads_empty_kind">No %1$s downloaded yet.</string>
     <string name="downloads_all">All</string>
     <string name="downloads_reels">Reels</string>
@@ -66,6 +67,13 @@
     <string name="preview_unavailable">Preview unavailable for this file</string>
 
     <string name="preview_label">Preview</string>
+    <string name="refresh_downloads_label">Refresh downloads</string>
+    <string name="show_more_label">Show more</string>
+    <string name="show_less_label">Show less</string>
+    <string name="caption_clipboard_label">Instagram caption</string>
+    <string name="caption_copied">Caption copied</string>
+    <string name="handle_clipboard_label">Instagram handle</string>
+    <string name="handle_copied">Instagram handle copied</string>
     <string name="items_count_format">%1$d items</string>
     <string name="data_saver_suffix_format"> · Data Saver %1$dpx</string>
 

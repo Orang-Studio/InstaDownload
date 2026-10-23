@@ -109,6 +109,9 @@ fun ProfileBrowser(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val genericError = stringResource(R.string.error_generic)
+    val savedFormat = stringResource(R.string.profile_saved_format)
+    val savedFailedFormat = stringResource(R.string.profile_saved_failed_format)
     val targetWidth = remember { settings.targetWidth() }
 
     var posts by remember { mutableStateOf<List<ProfilePost>>(emptyList()) }
@@ -139,7 +142,7 @@ fun ProfileBrowser(
             page.profilePicUrl?.let { profilePicUrl = it }
             if (page.nextCursor == null) finished = true else cursor = page.nextCursor
         }.onFailure {
-            if (it !is CancellationException) error = it.message ?: context.getString(R.string.error_generic)
+            if (it !is CancellationException) error = it.message ?: genericError
         }
     }
 
@@ -242,8 +245,8 @@ fun ProfileBrowser(
                                     }
                                 } finally {
                                     if (fellBack) onFolderAccessLost()
-                                    saveResult = if (failed == 0) context.getString(R.string.profile_saved_format, saved)
-                                        else context.getString(R.string.profile_saved_failed_format, saved, failed)
+                                    saveResult = if (failed == 0) savedFormat.format(saved)
+                                        else savedFailedFormat.format(saved, failed)
                                     saveJob = null
                                 }
                             }
@@ -349,6 +352,7 @@ fun ProfileBrowser(
 @Composable
 private fun FilterChips(filter: PostFilter, onChange: (PostFilter) -> Unit) {
     val context = LocalContext.current
+    val typeLabels = PostType.entries.associateWith { stringResource(typeLabel(it)) }
     var openMenu by remember { mutableStateOf<String?>(null) }
     var showCaptionDialog by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -367,7 +371,7 @@ private fun FilterChips(filter: PostFilter, onChange: (PostFilter) -> Unit) {
                 label = {
                     Text(
                         if (filter.types.size == PostType.entries.size) stringResource(R.string.filter_type_all)
-                        else filter.types.joinToString { context.getString(typeLabel(it)) }
+                        else filter.types.joinToString { typeLabels.getValue(it) }
                     )
                 }
             )

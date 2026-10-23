@@ -9,6 +9,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.util.LruCache
 import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
@@ -91,6 +92,11 @@ object DownloadHistory {
 }
 
 object DownloadedFiles {
+    private val previewCache = object : LruCache<String, Bitmap>(8 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int =
+            (value.byteCount / 1024).coerceAtLeast(1)
+    }
+
     fun exists(context: Context, record: DownloadRecord): Boolean {
         val uri = Uri.parse(record.uri)
         if (uri.scheme == "file") return File(uri.path ?: return false).exists()
@@ -111,9 +117,11 @@ object DownloadedFiles {
     }
 
     fun previewBitmap(context: Context, record: DownloadRecord, maxSide: Int): Bitmap? = runCatching {
+        val cacheKey = "${record.uri}|$maxSide"
+        previewCache.get(cacheKey)?.let { return@runCatching it }
         if (record.mimeType.startsWith("video/")) {
             val retriever = MediaMetadataRetriever()
-            return try {
+            return@runCatching try {
                 retriever.setDataSource(context, Uri.parse(record.uri))
                 retriever.getFrameAtTime(0)?.let { scaleDown(it, maxSide) }
             } finally {
@@ -127,7 +135,7 @@ object DownloadedFiles {
         while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         openInput(context, record).use { BitmapFactory.decodeStream(it, null, options) }
-    }.getOrNull()
+    }.getOrNull()?.also { previewCache.put("${record.uri}|$maxSide", it) }
 
     private fun scaleDown(bitmap: Bitmap, maxSide: Int): Bitmap {
         val longest = maxOf(bitmap.width, bitmap.height)
