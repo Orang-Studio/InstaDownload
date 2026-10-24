@@ -11,14 +11,19 @@ import android.provider.MediaStore
 
 internal data class SaveOutcome(val fellBackToDefaultFolder: Boolean)
 
-internal fun saveToDownloads(item: MediaResult, context: Context, settings: AppSettings): SaveOutcome {
+internal fun saveToDownloads(
+    item: MediaResult,
+    context: Context,
+    settings: AppSettings,
+    treeUri: String? = settings.downloadTreeUri
+): SaveOutcome {
     val base = item.baseName.ifBlank { "instagram_${System.currentTimeMillis()}" }
     val fileName = if (item.isVideo) "$base.mp4" else "$base.jpg"
     val mimeType = if (item.isVideo) "video/mp4" else "image/jpeg"
     val (uri, fellBack) = try {
-        saveTo(item, context, settings.downloadTreeUri, fileName, mimeType) to false
+        saveTo(item, context, treeUri, fileName, mimeType) to false
     } catch (e: Exception) {
-        if (settings.downloadTreeUri == null) throw e
+        if (treeUri == null || treeUri != settings.downloadTreeUri) throw e
         settings.downloadTreeUri = null
         settings.downloadFolderName = AppSettings.DEFAULT_FOLDER_NAME
         saveTo(item, context, null, fileName, mimeType) to true

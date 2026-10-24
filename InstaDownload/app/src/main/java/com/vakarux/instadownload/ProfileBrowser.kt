@@ -1,11 +1,18 @@
 package com.vakarux.instadownload
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
 import android.widget.VideoView
 import android.text.format.DateUtils
 import android.util.LruCache
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -42,8 +49,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.vakarux.instadownload.ui.AppIcons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.TimeZone
@@ -108,10 +113,7 @@ fun ProfileBrowser(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val genericError = stringResource(R.string.error_generic)
-    val savedFormat = stringResource(R.string.profile_saved_format)
-    val savedFailedFormat = stringResource(R.string.profile_saved_failed_format)
     val targetWidth = remember { settings.targetWidth() }
 
     var posts by remember { mutableStateOf<List<ProfilePost>>(emptyList()) }
@@ -123,9 +125,27 @@ fun ProfileBrowser(
     var error by remember { mutableStateOf<String?>(null) }
     var filter by remember { mutableStateOf(PostFilter()) }
     var deselected by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var saveJob by remember { mutableStateOf<Job?>(null) }
-    var saveProgress by remember { mutableStateOf(0 to 0) }
-    var saveResult by remember { mutableStateOf<String?>(null) }
+    val batch by QuickDownloadService.batch.collectAsState()
+    val saving = batch?.running == true
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    var folderName by remember { mutableStateOf(settings.profileFolderName) }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        settings.profileTreeUri = uri.toString()
+        settings.profileFolderName = runCatching { DocumentsContract.getTreeDocumentId(uri).substringAfterLast(':') }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: context.getString(R.string.selected_folder_default)
+        folderName = settings.profileFolderName
+    }
+
+    LaunchedEffect(batch?.running) {
+        if (batch?.running == false && batch?.fellBack == true) onFolderAccessLost()
+    }
 
     val oldestSec = posts.lastOrNull()?.takenAtSec
     val reachedDateStart = filter.fromSec != null && oldestSec != null && oldestSec < filter.fromSec!!
@@ -150,13 +170,13 @@ fun ProfileBrowser(
     val selected = visible.filter { it.code !in deselected }
     val fileCount = selected.sumOf { it.mediaCount }
 
-    BackHandler { if (saveJob == null) onClose() }
+    BackHandler(onBack = onClose)
 
     Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = onClose, enabled = saveJob == null) {
+                    IconButton(onClick = onClose) {
                         Icon(AppIcons.Close, contentDescription = stringResource(R.string.close_label))
                     }
                 },
@@ -205,53 +225,49 @@ fun ProfileBrowser(
                         .navigationBarsPadding()
                         .padding(16.dp)
                 ) {
-                    saveResult?.let {
+                    batch?.takeIf { !it.running }?.let {
                         Text(
-                            it,
+                            if (it.failed == 0) stringResource(R.string.profile_saved_format, it.saved)
+                            else stringResource(R.string.profile_saved_failed_format, it.saved, it.failed),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.profile_save_to_label),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { folderPicker.launch(null) }, enabled = !saving) {
+                            Text(folderName ?: settings.downloadFolderName, maxLines = 1)
+                        }
+                        if (folderName != null) TextButton(
+                            onClick = {
+                                settings.profileTreeUri = null
+                                settings.profileFolderName = null
+                                folderName = null
+                            },
+                            enabled = !saving
+                        ) { Text(stringResource(R.string.reset_filters_label)) }
+                    }
                     Button(
                         onClick = {
-                            saveJob?.let { it.cancel(); return@Button }
-                            val toSave = selected
-                            val total = fileCount
-                            saveResult = null
-                            saveJob = scope.launch {
-                                var saved = 0
-                                var failed = 0
-                                var fellBack = false
-                                try {
-                                    toSave.forEach { post ->
-                                        saveProgress = (saved + failed + 1) to total
-                                        val items = withContext(Dispatchers.IO) {
-                                            runCatching {
-                                                InstagramDownloader.getMediaItems("https://www.instagram.com/p/${post.code}/", targetWidth)
-                                            }
-                                        }.getOrElse {
-                                            failed += post.mediaCount
-                                            return@forEach
-                                        }
-                                        items.forEach { item ->
-                                            saveProgress = (saved + failed + 1) to total
-                                            withContext(Dispatchers.IO) {
-                                                runCatching { saveToDownloads(item, context, settings).fellBackToDefaultFolder }
-                                            }.onSuccess {
-                                                saved++
-                                                if (it) fellBack = true
-                                            }.onFailure { failed++ }
-                                        }
-                                    }
-                                } finally {
-                                    if (fellBack) onFolderAccessLost()
-                                    saveResult = if (failed == 0) savedFormat.format(saved)
-                                        else savedFailedFormat.format(saved, failed)
-                                    saveJob = null
-                                }
+                            if (saving) {
+                                QuickDownloadService.stopBatch(context)
+                                return@Button
                             }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            QuickDownloadService.startBatch(context, selected, settings.profileTreeUri)
                         },
-                        enabled = saveJob != null || fileCount > 0,
+                        enabled = saving || fileCount > 0,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -259,8 +275,9 @@ fun ProfileBrowser(
                         colors = ButtonDefaults.buttonColors(containerColor = IgPink, contentColor = Color.White)
                     ) {
                         Text(
-                            if (saveJob != null) stringResource(
-                                R.string.profile_saving_format, saveProgress.first, saveProgress.second
+                            if (saving) stringResource(
+                                R.string.profile_saving_format,
+                                (batch!!.done + 1).coerceAtMost(batch!!.total), batch!!.total
                             ) else stringResource(R.string.profile_download_format, fileCount),
                             fontWeight = FontWeight.Bold
                         )

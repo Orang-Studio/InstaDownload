@@ -50,6 +50,14 @@ class AppSettings(context: Context) {
         get() = prefs.getString("profile_query", null)
         set(value) = prefs.edit().putString("profile_query", value).apply()
 
+    var profileTreeUri: String?
+        get() = prefs.getString("profile_tree_uri", null)
+        set(value) = prefs.edit().putString("profile_tree_uri", value).apply()
+
+    var profileFolderName: String?
+        get() = prefs.getString("profile_folder_name", null)
+        set(value) = prefs.edit().putString("profile_folder_name", value).apply()
+
     fun targetWidth(): Int = when (effectiveQuality()) {
         DownloadQuality.DATA_SAVER -> 0
         DownloadQuality.CUSTOM -> customWidth

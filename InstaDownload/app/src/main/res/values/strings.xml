@@ -129,6 +129,8 @@
     <string name="profile_saving_format">Saving %1$d of %2$d… tap to stop</string>
     <string name="profile_saved_format">Saved %1$d files</string>
     <string name="profile_saved_failed_format">Saved %1$d files, %2$d failed</string>
+    <string name="batch_progress_format">Saved %1$d of %2$d files</string>
+    <string name="profile_save_to_label">Save to folder</string>
     <string name="filter_type_all">All types</string>
     <string name="filter_type_photos">Photos</string>
     <string name="filter_type_videos">Videos</string>

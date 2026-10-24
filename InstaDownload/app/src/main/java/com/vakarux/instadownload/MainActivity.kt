@@ -106,7 +106,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
-        showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
+        if (savedInstanceState == null) showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
 
         setContent {
             val settings = appSettings
