@@ -43,6 +43,13 @@ object AppIcons {
         )
     }
 
+    val Login: ImageVector by lazy {
+        materialIcon(
+            "Login",
+            "M10,17l5,-5l-5,-5v3H2v4h8v3zM19,3H5c-1.1,0 -2,0.9 -2,2v3h2V5h14v14H5v-3H3v3c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2z"
+        )
+    }
+
     val Movie: ImageVector by lazy {
         materialIcon(
             "Movie",

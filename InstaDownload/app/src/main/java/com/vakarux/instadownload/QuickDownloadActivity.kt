@@ -12,7 +12,19 @@ class QuickDownloadActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        intent?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.let { url ->
+        val sharedUrl = intent?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString().orEmpty()
+        if (InstagramDownloader.isStoryUrl(sharedUrl)) {
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_SEND
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, sharedUrl)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            })
+            finish()
+            return
+        }
+        if (sharedUrl.isNotBlank()) {
+            val url = sharedUrl
             val serviceIntent = Intent(this, QuickDownloadService::class.java).apply {
                 action = QuickDownloadService.ACTION_DOWNLOAD
                 putExtra(QuickDownloadService.EXTRA_URL, url)

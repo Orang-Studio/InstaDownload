@@ -30,11 +30,34 @@
     <string name="url_field_placeholder">https://www.instagram.com/reel/...</string>
     <string name="paste_clipboard_description">Paste from clipboard</string>
 
-    <string name="story_not_supported_title">Stories aren\'t supported</string>
-    <string name="story_not_supported_body">Instagram only serves Stories to logged-in accounts, so they can\'t be downloaded here. Reels and posts work as usual.</string>
+    <string name="stories_label">Stories</string>
+    <string name="story_login_title">Log in to load Stories</string>
+    <string name="story_login_body">Instagram only shows active Stories to signed-in accounts. Log in once inside InstaDownload; the session is stored encrypted on this device and is sent only to Instagram.</string>
+    <string name="story_available_title">Active Stories found</string>
+    <string name="story_available_body">Load every active Story this account can view, preview them, and choose exactly what to save.</string>
+    <string name="login_title">Log in to Instagram</string>
+    <string name="login_to_instagram_button">Log in to Instagram</string>
+    <string name="view_active_stories_button">View active Stories</string>
+    <string name="account_heading">Instagram account</string>
+    <string name="status_logged_in">Status: Logged in</string>
+    <string name="status_logged_out">Status: Logged out</string>
+    <string name="log_in_button">Log in</string>
+    <string name="log_out_button">Log out</string>
+    <string name="login_required_note">Login is used only for Stories. Public posts and reels still work without an account.</string>
+
+    <string name="story_title_format">@%1$s</string>
+    <string name="story_count_format">%1$d active Stories</string>
+    <string name="story_selected_format">%1$d of %2$d selected</string>
+    <string name="stories_deselect_all">Deselect all</string>
+    <string name="story_download_format">Download %1$d selected</string>
+    <string name="story_saving_format">Saving %1$d of %2$d… tap to stop</string>
+    <string name="story_saved_format">Saved %1$d Stories to your gallery</string>
+    <string name="story_saved_failed_format">Saved %1$d Stories, %2$d failed</string>
+    <string name="story_empty">No active Stories were found for this account.</string>
+    <string name="shared_story_label">Shared</string>
 
     <string name="error_empty_url">Please enter a URL</string>
-    <string name="error_invalid_url">Not a valid Instagram post or reel URL</string>
+    <string name="error_invalid_url">Not a valid Instagram post, reel, profile, or Story URL</string>
     <string name="error_generic">Something went wrong</string>
     <string name="error_download_failed">Download failed</string>
 

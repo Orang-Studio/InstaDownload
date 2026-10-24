@@ -34,19 +34,20 @@ A privacy-friendly Android app for downloading public Instagram reels, photos, v
 ## Features
 
 - Download Instagram photos, reels, and videos.
+- Download active Stories from accounts your Instagram account can view.
 - Download every photo or video from carousel posts.
 - Bulk download from accounts
 - Paste a link and save the media directly to your device.
 - Quick download by sharing to the app without opening it.
 - **No ads**, analytics, or tracking.
 - No third-party download service.
-- **No Instagram login** required for public content.
+- **No Instagram login** required for public posts and reels. Stories require an optional in-app login.
 - Download library
 - Fully open source under the GPLv3 License.
 - Works on Android 17!
 
 > [!IMPORTANT]
-> The **Stories version, NOT MAIN VERSION** requires you to log in to Instagram (OPTIONAL FOR REELS). Only download it from the official [InstaDownload releases page](https://github.com/Orang-Studio/InstaDownload/releases).
+> Stories are supported in the app and require an optional in-app Instagram login. Public posts and reels still work without logging in.
 
 ## Screenshots
 
@@ -77,6 +78,13 @@ Method 2:
 4. Tap **Download**.
 5. Find the downloaded media in your device's `Downloads` folder.
 
+Method 3 (Stories):
+1. Copy or share an Instagram Story URL such as `https://www.instagram.com/stories/user/123456789/`.
+2. Open InstaDownload and tap **Log in to Instagram** when prompted.
+3. Review the active Stories visible to your account.
+4. Select the Stories you want and tap **Download selected**.
+5. Find images in `Pictures/InstaDownload` and videos in `Movies/InstaDownload`.
+
 
 
 <details>
@@ -91,7 +99,9 @@ InstaDownload supports public links containing:
 - `instagram.com/tv/`
 `tv is deprecated link type`
 
-The Stories version additionally supports Instagram Stories and private posts your account has permission to view.
+Signed-in users can also share `instagram.com/stories/<username>/<media-id>/` links to select and batch-download active Stories.
+
+The app additionally supports Instagram Stories visible to your signed-in account. Public posts, reels, and profile browsing remain available without login.
 
 </details>
 

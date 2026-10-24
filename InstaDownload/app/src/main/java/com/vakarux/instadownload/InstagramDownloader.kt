@@ -4,6 +4,7 @@ import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -52,6 +53,17 @@ data class ProfilePost(
 
 class ProfilePage(val posts: List<ProfilePost>, val nextCursor: String?, val profilePicUrl: String?)
 
+data class StoryMedia(
+    val id: String,
+    val media: MediaResult,
+)
+
+class StoryPage(
+    val username: String,
+    val stories: List<StoryMedia>,
+    val sharedMediaId: String,
+)
+
 private class StaleQueryException(message: String) : Exception(message)
 
 object InstagramDownloader {
@@ -86,8 +98,8 @@ object InstagramDownloader {
         .cookieJar(cookieJar)
         .build()
 
-    private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    private val MOBILE_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 7) " +
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
     private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64; rv:157.0) Gecko/20100101 Firefox/157.0"
     private const val IG_APP_ID = "936619743392459"
     private const val PROFILE_QUERY = "PolarisLoggedOutDesktopWWWProfilePostsTabContentQuery_connection"
@@ -96,6 +108,53 @@ object InstagramDownloader {
     private var lsd: String? = null
     private val profileIds = mutableMapOf<String, String>()
     private val profilePics = mutableMapOf<String, String>()
+
+    fun isStoryUrl(url: String): Boolean = InstagramStoryLinks.parse(url) != null
+
+    fun fetchActiveStories(
+        storyUrl: String,
+        session: IgSession,
+        targetWidth: Int = Int.MAX_VALUE,
+    ): StoryPage {
+        val link = InstagramStoryLinks.parse(storyUrl)
+            ?: throw IllegalArgumentException("Invalid Instagram story URL: $storyUrl")
+        val userLookup = runCatching { fetchUserId(link.username, session) }
+        val userLookupFailure = userLookup.exceptionOrNull()
+        val userId = userLookup.getOrNull()
+        var feedFailure: Throwable? = null
+
+        if (userId != null) {
+            val feedResult = runCatching {
+                val feed = fetchStoryFeed(userId, session)
+                val items = storyItems(feed, userId)
+                    ?: throw Exception("Instagram returned an unexpected Stories response")
+                (0 until items.length()).mapNotNull { index ->
+                    val item = items.optJSONObject(index) ?: return@mapNotNull null
+                    storyMedia(item, link.username, index, targetWidth)
+                }
+            }
+            feedFailure = feedResult.exceptionOrNull()
+            feedResult.getOrNull()?.takeIf { it.isNotEmpty() }?.let { stories ->
+                return StoryPage(link.username, stories, link.mediaId)
+            }
+        }
+
+        // A shared Story URL contains the media id. Try the media endpoint as a
+        // fallback so an account lookup failure does not make an otherwise valid
+        // shared Story impossible to download.
+        fetchDirectStory(link, session, targetWidth)?.let { return it }
+
+        val detail = listOfNotNull(userLookupFailure?.message, feedFailure?.message)
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString("\n")
+            ?.let { "\n\nDetails: $it" }
+            .orEmpty()
+        throw Exception(
+            "Could not load Stories for @${link.username}. " +
+                "The Story may have expired, the account may be unavailable to your account, " +
+                "or Instagram may have rejected this session. Log in again and retry." + detail
+        )
+    }
 
     fun getMediaItems(postUrl: String, targetWidth: Int = Int.MAX_VALUE): List<MediaResult> {
         val post = extractPostRef(postUrl) ?: run {
@@ -116,6 +175,267 @@ object InstagramDownloader {
         }
     }
 
+    private fun fetchUserId(username: String, session: IgSession): String {
+        val profileEndpoints = listOf("www.instagram.com", "i.instagram.com")
+        var lastStatus = "no response"
+
+        profileEndpoints.forEach { host ->
+            val url = HttpUrl.Builder()
+                .scheme("https")
+                .host(host)
+                .addPathSegments("api/v1/users/web_profile_info/")
+                .addQueryParameter("username", username)
+                .build()
+            val response = runCatching {
+                client.newCall(authenticatedRequest(url, session)).execute()
+            }.getOrNull() ?: return@forEach
+            val code = response.code
+            val body = response.use { it.body?.string().orEmpty() }
+            lastStatus = "$host HTTP $code"
+            val json = runCatching { JSONObject(body) }.getOrNull() ?: return@forEach
+            val user = json.optJSONObject("data")?.optJSONObject("user")
+                ?: json.optJSONObject("user")
+            userId(user)?.let { return it }
+        }
+
+        // Instagram frequently returns a schema/400 response for creator and
+        // business accounts from web_profile_info. The topsearch endpoint is
+        // the fallback used by current browser-cookie clients.
+        listOf(
+            "https://www.instagram.com/web/search/topsearch/",
+            "https://www.instagram.com/api/v1/web/search/topsearch/",
+        ).forEach { endpoint ->
+            val url = endpoint.toHttpUrl().newBuilder()
+                .addQueryParameter("query", username)
+                .build()
+            val response = runCatching {
+                client.newCall(authenticatedRequest(url, session)).execute()
+            }.getOrNull() ?: return@forEach
+            val code = response.code
+            val body = response.use { it.body?.string().orEmpty() }
+            lastStatus = "${url.host} HTTP $code"
+            val json = runCatching { JSONObject(body) }.getOrNull() ?: return@forEach
+            val users = json.optJSONArray("users") ?: return@forEach
+            for (index in 0 until users.length()) {
+                val result = users.optJSONObject(index) ?: continue
+                val user = result.optJSONObject("user") ?: result
+                if (user.optString("username").equals(username, ignoreCase = true)) {
+                    userId(user)?.let { return it }
+                }
+            }
+        }
+
+        // Last lookup fallback: the signed-in web page still commonly embeds
+        // profile_id even when both JSON endpoints are rate-limited.
+        val pageUrl = HttpUrl.Builder()
+            .scheme("https")
+            .host("www.instagram.com")
+            .addPathSegment(username)
+            .build()
+        val pageResponse = runCatching {
+            client.newCall(
+                authenticatedRequest(pageUrl, session).newBuilder()
+                    .header("User-Agent", DESKTOP_UA)
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .build()
+            ).execute()
+        }.getOrNull()
+        if (pageResponse != null) {
+            val body = pageResponse.use { it.body?.string().orEmpty() }
+            lastStatus = "profile page HTTP ${pageResponse.code}"
+            listOf(
+                Regex("\\\"profile_id\\\":\\\"(\\d+)\\\""),
+                Regex("profilePage_(\\d+)"),
+                Regex("\\\"user_id\\\":\\\"(\\d+)\\\""),
+            ).firstNotNullOfOrNull { it.find(body)?.groupValues?.getOrNull(1) }?.let { return it }
+        }
+
+        throw Exception(
+            "Could not resolve @$username ($lastStatus). " +
+                "Instagram rejected the profile lookup; try logging in again."
+        )
+    }
+
+    private fun userId(user: JSONObject?): String? = user?.optString("id")
+        ?.takeIf { it.isNotBlank() }
+        ?: user?.optString("pk")?.takeIf { it.isNotBlank() }
+
+    private fun fetchDirectStory(
+        link: InstagramStoryLink,
+        session: IgSession,
+        targetWidth: Int,
+    ): StoryPage? {
+        val hosts = listOf("www.instagram.com", "i.instagram.com")
+        hosts.forEach { host ->
+            val url = HttpUrl.Builder()
+                .scheme("https")
+                .host(host)
+                .addPathSegments("api/v1/media/${link.mediaId}/info/")
+                .build()
+            val response = runCatching {
+                client.newCall(authenticatedRequest(url, session)).execute()
+            }.getOrNull() ?: return@forEach
+            val body = response.use { it.body?.string().orEmpty() }
+            val json = runCatching { JSONObject(body) }.getOrNull() ?: return@forEach
+            val item = json.optJSONArray("items")?.optJSONObject(0)
+                ?: json.optJSONObject("item")
+                ?: return@forEach
+            val owner = item.optJSONObject("user")?.optString("username")
+                ?.takeIf { it.isNotBlank() } ?: link.username
+            storyMedia(item, owner, 0, targetWidth)?.let {
+                return StoryPage(owner, listOf(it), link.mediaId)
+            }
+        }
+        return null
+    }
+
+    private fun fetchStoryFeed(userId: String, session: IgSession): JSONObject {
+        val urls = listOf(
+            HttpUrl.Builder()
+                .scheme("https")
+                .host("www.instagram.com")
+                .addPathSegments("api/v1/feed/reels_media/")
+                .addQueryParameter("reel_ids", userId)
+                .build(),
+            HttpUrl.Builder()
+                .scheme("https")
+                .host("www.instagram.com")
+                .addPathSegments("api/v1/feed/user/$userId/reel_media/")
+                .build(),
+            HttpUrl.Builder()
+                .scheme("https")
+                .host("www.instagram.com")
+                .addPathSegments("api/v1/feed/user/$userId/story/")
+                .build(),
+            HttpUrl.Builder()
+                .scheme("https")
+                .host("i.instagram.com")
+                .addPathSegments("api/v1/feed/reels_media/")
+                .addQueryParameter("reel_ids", userId)
+                .build(),
+        )
+        var lastError = "unknown response"
+        var emptyResponse: JSONObject? = null
+        urls.forEach { url ->
+            val response = runCatching {
+                client.newCall(authenticatedRequest(url, session)).execute()
+            }.getOrNull() ?: return@forEach
+            val body = response.use { it.body?.string().orEmpty() }
+            if (!response.isSuccessful) {
+                lastError = "HTTP ${response.code}: ${body.take(160)}"
+                return@forEach
+            }
+            val json = runCatching { JSONObject(body) }.getOrNull()
+            if (json != null) {
+                val items = storyItems(json, userId)
+                if (items != null) {
+                    if (items.length() > 0) return json
+                    emptyResponse = json
+                    lastError = "no active Stories returned"
+                    return@forEach
+                }
+            }
+            lastError = "unexpected response: ${body.take(160)}"
+        }
+        emptyResponse?.let { return it }
+        throw Exception("Could not load active stories from Instagram ($lastError)")
+    }
+
+    private fun storyItems(response: JSONObject, userId: String): JSONArray? {
+        response.optJSONArray("reels_media")?.let { reels ->
+            if (reels.length() == 0) return JSONArray()
+            for (index in 0 until reels.length()) {
+                reels.optJSONObject(index)?.optJSONArray("items")?.let { return it }
+            }
+        }
+        response.optJSONObject("reels_media")?.let { reels ->
+            reels.optJSONObject(userId)?.optJSONArray("items")?.let { return it }
+            val keys = reels.keys()
+            while (keys.hasNext()) {
+                reels.optJSONObject(keys.next())?.optJSONArray("items")?.let { return it }
+            }
+        }
+        response.optJSONObject("reel")?.optJSONArray("items")?.let { return it }
+        response.optJSONArray("items")?.let { return it }
+        response.optJSONArray("reels")?.let { reels ->
+            for (index in 0 until reels.length()) {
+                reels.optJSONObject(index)?.optJSONArray("items")?.let { return it }
+            }
+        }
+        response.optJSONObject("reels")?.let { reels ->
+            reels.optJSONObject(userId)?.optJSONArray("items")?.let { return it }
+            val keys = reels.keys()
+            while (keys.hasNext()) {
+                reels.optJSONObject(keys.next())?.optJSONArray("items")?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun storyMedia(
+        item: JSONObject,
+        username: String,
+        index: Int,
+        targetWidth: Int,
+    ): StoryMedia? {
+        val id = item.optString("pk").ifBlank { item.optString("id") }
+            .takeIf { it.isNotBlank() } ?: return null
+        val url = "https://www.instagram.com/stories/$username/$id/"
+        val media = extractSingleStoryItem(item, targetWidth)?.copy(
+            baseName = "${safeFilePart(username)}_story_${index + 1}_${safeFilePart(id)}",
+            meta = storyMeta(item, username, url),
+        ) ?: return null
+        return StoryMedia(id, media)
+    }
+
+    private fun storyMeta(item: JSONObject, username: String, url: String): PostMeta {
+        val clips = item.optJSONObject("clips_metadata")
+        val licensed = clips?.optJSONObject("music_info")?.optJSONObject("music_asset_info")
+            ?.let { listOf(it.optString("display_artist"), it.optString("title")) }
+        val original = clips?.optJSONObject("original_sound_info")
+            ?.let { listOf(it.optJSONObject("ig_artist")?.optString("username").orEmpty(), it.optString("original_audio_title")) }
+        val caption = item.optJSONObject("caption")?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+            ?: item.optString("story_cta_text").takeIf { it.isNotBlank() }
+        return PostMeta(
+            username = username,
+            caption = caption,
+            url = url,
+            song = (licensed ?: original)?.filter { it.isNotBlank() }
+                ?.joinToString(" - ")?.takeIf { it.isNotBlank() },
+            takenAtSec = item.optLong("taken_at"),
+        )
+    }
+
+    private fun safeFilePart(value: String): String =
+        value.replace(Regex("[^\\p{L}\\p{N}._-]+"), "_").take(48).ifBlank { "story" }
+
+    private fun authenticatedRequest(url: HttpUrl, session: IgSession): Request {
+        return Request.Builder()
+            .url(url)
+            .header("User-Agent", session.userAgent ?: MOBILE_UA)
+            .header("X-IG-App-ID", IG_APP_ID)
+            .header("X-Requested-With", "XMLHttpRequest")
+            .header("X-ASBD-ID", "129477")
+            .header("X-IG-WWW-Claim", "0")
+            .header("Accept", "application/json")
+            .header("Origin", "https://www.instagram.com")
+            .header("Referer", "https://www.instagram.com/")
+            .header("Cookie", session.cookieHeader())
+            .apply {
+                session.csrfToken?.takeIf { it.isNotBlank() }?.let { header("X-CSRFToken", it) }
+            }
+            .get()
+            .build()
+    }
+
+    private fun IgSession.cookieHeader(): String = cookieHeader?.takeIf { it.isNotBlank() }
+        ?: listOfNotNull(
+            "sessionid=$sessionId",
+            csrfToken?.takeIf { it.isNotBlank() }?.let { "csrftoken=$it" },
+            userId?.takeIf { it.isNotBlank() }?.let { "ds_user_id=$it" },
+        ).joinToString("; ")
+
     private val SIZE_TOKEN = Regex("""_[ps](\d+)x(\d+)""")
 
     private fun JSONObject.renditionWidth(): Int = optInt("width").takeIf { it > 0 }
@@ -135,7 +455,6 @@ object InstagramDownloader {
         val preview = images.pick(minOf(targetWidth, 640))?.optString("url")
             ?: item.optString("display_url").takeIf { it.isNotBlank() }
 
-        android.util.Log.d("IGDBG", "keys=" + item.keys().asSequence().joinToString() + " vid0=" + videos?.optJSONObject(0) + " img0=" + images?.optJSONObject(0))
         val video = videos.pick(targetWidth)
         val chosen = video ?: images.pick(targetWidth)
             ?: return preview?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
@@ -419,26 +738,37 @@ object InstagramDownloader {
         return id.toString()
     }
 
-    private fun mediaRequest(url: String) = Request.Builder()
-        .url(url)
-        .header("User-Agent", MOBILE_UA)
-        .header("Referer", "https://www.instagram.com/")
-        .get().build()
+    private fun mediaRequest(url: String, session: IgSession? = null): Request {
+        return Request.Builder()
+            .url(url)
+            .header("User-Agent", session?.userAgent ?: MOBILE_UA)
+            .header("Referer", "https://www.instagram.com/")
+            .apply {
+                session?.let {
+                    header("X-IG-App-ID", IG_APP_ID)
+                    header("Cookie", it.cookieHeader())
+                    it.csrfToken?.takeIf { token -> token.isNotBlank() }
+                        ?.let { token -> header("X-CSRFToken", token) }
+                }
+            }
+            .get()
+            .build()
+    }
 
-    fun downloadToStream(url: String, out: java.io.OutputStream) {
-        val response = client.newCall(mediaRequest(url)).execute()
+    fun downloadToStream(url: String, out: java.io.OutputStream, session: IgSession? = null) {
+        val response = client.newCall(mediaRequest(url, session)).execute()
         if (!response.isSuccessful) throw Exception("Download HTTP ${response.code}")
         response.body?.byteStream()?.copyTo(out)
             ?: throw Exception("Empty download body")
     }
 
-    fun contentLength(url: String): Long =
-        client.newCall(mediaRequest(url).newBuilder().head().build()).execute().use {
+    fun contentLength(url: String, session: IgSession? = null): Long =
+        client.newCall(mediaRequest(url, session).newBuilder().head().build()).execute().use {
             it.header("Content-Length")?.toLongOrNull() ?: -1L
         }
 
-    fun fetchBytes(url: String): ByteArray {
-        val response = client.newCall(mediaRequest(url)).execute()
+    fun fetchBytes(url: String, session: IgSession? = null): ByteArray {
+        val response = client.newCall(mediaRequest(url, session)).execute()
         if (!response.isSuccessful) throw Exception("Preview HTTP ${response.code}")
         return response.body?.bytes() ?: throw Exception("Empty preview body")
     }

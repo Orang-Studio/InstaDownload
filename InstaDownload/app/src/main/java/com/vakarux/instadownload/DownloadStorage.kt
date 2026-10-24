@@ -8,6 +8,7 @@ import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.media.MediaScannerConnection
 
 internal data class SaveOutcome(val fellBackToDefaultFolder: Boolean)
 
@@ -28,6 +29,106 @@ internal fun saveToDownloads(item: MediaResult, context: Context, settings: AppS
         item.width.takeIf { it < Int.MAX_VALUE } ?: 0, item.height, item.durationSec
     ))
     return SaveOutcome(fellBack)
+}
+
+internal fun saveStoryToGallery(
+    item: MediaResult,
+    context: Context,
+    session: IgSession,
+): SaveOutcome {
+    val base = item.baseName.ifBlank { "instagram_story_${System.currentTimeMillis()}" }
+    val fileName = if (item.isVideo) "$base.mp4" else "$base.jpg"
+    val mimeType = if (item.isVideo) "video/mp4" else "image/jpeg"
+    val resolver = context.contentResolver
+    val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                if (item.isVideo) {
+                    Environment.DIRECTORY_MOVIES + "/InstaDownload"
+                } else {
+                    Environment.DIRECTORY_PICTURES + "/InstaDownload"
+                }
+            )
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val collection = if (item.isVideo) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        }
+        val pendingUri = resolver.insert(collection, values)
+            ?: throw Exception(context.getString(R.string.error_create_file_in_downloads))
+        try {
+            writeGalleryMedia(item, context, session, pendingUri)
+            values.clear()
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(pendingUri, values, null, null)
+            pendingUri
+        } catch (error: Exception) {
+            runCatching { resolver.delete(pendingUri, null, null) }
+            throw error
+        }
+    } else {
+        val directory = java.io.File(
+            Environment.getExternalStoragePublicDirectory(
+                if (item.isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+            ),
+            "InstaDownload"
+        ).apply { mkdirs() }
+        val file = java.io.File(directory, fileName)
+        try {
+            file.outputStream().use { out ->
+                InstagramDownloader.downloadToStream(item.url, out, session)
+            }
+            if (!item.isVideo) tagJpeg(item.meta) {
+                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE).use(it)
+            }
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(file.absolutePath),
+                arrayOf(mimeType),
+                null,
+            )
+            Uri.fromFile(file)
+        } catch (error: Exception) {
+            runCatching { file.delete() }
+            throw error
+        }
+    }
+
+    recordDownload(item, uri, fileName, mimeType, context)
+    return SaveOutcome(false)
+}
+
+private fun writeGalleryMedia(
+    item: MediaResult,
+    context: Context,
+    session: IgSession,
+    uri: Uri,
+) {
+    context.contentResolver.openOutputStream(uri)?.use { out ->
+        InstagramDownloader.downloadToStream(item.url, out, session)
+    } ?: throw Exception(context.getString(R.string.error_write_to_folder))
+    if (!item.isVideo) tagJpeg(item.meta) {
+        context.contentResolver.openFileDescriptor(uri, "rw")?.use(it)
+            ?: throw Exception(context.getString(R.string.error_write_to_folder))
+    }
+}
+
+private fun recordDownload(
+    item: MediaResult,
+    uri: Uri,
+    fileName: String,
+    mimeType: String,
+    context: Context,
+) {
+    DownloadHistory.add(context, DownloadRecord(
+        uri.toString(), fileName, mimeType, System.currentTimeMillis(), item.meta,
+        item.width.takeIf { it < Int.MAX_VALUE } ?: 0, item.height, item.durationSec
+    ))
 }
 
 private fun saveTo(

@@ -7,7 +7,8 @@ Features:
 * Download photos as JPG image files
 * Paste or share to app for quick URL input
 * Works with instagram.com/reel/, /p/, and /tv/ links
-* No account or login required on main version
+* No account or login required for public posts and reels
+* Download active Stories after an optional in-app login
 * No ads, no tracking, no analytics
 * Fully open source
 
@@ -15,6 +16,10 @@ Permissions:
 * Internet - to fetch the media
 * Storage - to save files (Android 9 and below only)
 * Vibrate - for haptic feedback
+
+Download public Instagram posts, reels, carousels, profiles, and active Stories visible to your account.
+
+Stories require an optional in-app Instagram login. Public posts and reels do not require login.
 
 Privacy policy: https://github.com/Orang-Studio/InstaDownload/blob/main/PRIVACY.md
 

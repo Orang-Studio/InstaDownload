@@ -66,6 +66,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:label="@string/login_title"
+            android:theme="@style/Theme.InstaDownload"
+            android:windowSoftInputMode="adjustNothing" />
+
         <service
             android:name=".QuickDownloadService"
             android:exported="false"

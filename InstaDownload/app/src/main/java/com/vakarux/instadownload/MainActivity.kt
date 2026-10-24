@@ -78,6 +78,10 @@ class MainActivity : ComponentActivity() {
     private val appSettings by lazy { AppSettings(this) }
     private val selectedFolderName = mutableStateOf(AppSettings.DEFAULT_FOLDER_NAME)
     private val showLibrary = mutableStateOf(false)
+    private val showStories = mutableStateOf(false)
+    private val pendingStoryOpen = mutableStateOf(false)
+    private val sessionStore by lazy { SessionStore(this) }
+    private val loggedIn = mutableStateOf(false)
     private class SharedUrl(val url: String)
     private val sharedUrl = mutableStateOf(SharedUrl(""))
 
@@ -100,10 +104,22 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { _ -> /* permission result handled inline */ }
+    ) { granted ->
+        if (pendingStoryOpen.value) {
+            pendingStoryOpen.value = false
+            if (granted) showStories.value = true
+        }
+    }
+
+    private val loginLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        loggedIn.value = sessionStore.isLoggedIn
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        loggedIn.value = sessionStore.isLoggedIn
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
         showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
@@ -117,10 +133,27 @@ class MainActivity : ComponentActivity() {
                 AppTheme.DARK -> true
             }
             InstaDownloadTheme(darkTheme = useDarkTheme) {
+                val currentSession = sessionStore.session
+                LaunchedEffect(sharedUrl.value.url, loggedIn.value) {
+                    if (loggedIn.value && InstagramDownloader.isStoryUrl(sharedUrl.value.url)) {
+                        openStories()
+                    }
+                }
                 InstagramDownloaderScreen(
                     initialUrl = sharedUrl.value.url,
                     initialUrlKey = sharedUrl.value,
                     useDarkTheme = useDarkTheme,
+                    isLoggedIn = loggedIn.value,
+                    onLoginClick = {
+                        loginLauncher.launch(Intent(this@MainActivity, LoginActivity::class.java))
+                    },
+                    onLogoutClick = {
+                        sessionStore.clear()
+                        loggedIn.value = false
+                        showStories.value = false
+                        pendingStoryOpen.value = false
+                    },
+                    onOpenStories = { openStories() },
                     settings = settings,
                     selectedFolderName = selectedFolderName.value,
                     onChooseFolder = { folderPickerLauncher.launch(null) },
@@ -132,7 +165,24 @@ class MainActivity : ComponentActivity() {
                 if (showLibrary.value) {
                     DownloadsDialog(onDismiss = { showLibrary.value = false })
                 }
+                if (showStories.value && currentSession != null && loggedIn.value) {
+                    StoryBrowser(
+                        storyUrl = sharedUrl.value.url,
+                        session = currentSession,
+                        settings = settings,
+                        onClose = { showStories.value = false },
+                    )
+                }
             }
+        }
+    }
+
+    private fun openStories() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && !checkPermissions()) {
+            pendingStoryOpen.value = true
+            requestPermissions()
+        } else {
+            showStories.value = true
         }
     }
 
@@ -140,6 +190,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
+        if (!InstagramDownloader.isStoryUrl(sharedUrl.value.url)) showStories.value = false
         if (intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)) showLibrary.value = true
     }
 
@@ -157,6 +208,10 @@ class MainActivity : ComponentActivity() {
         initialUrl: String = "",
         initialUrlKey: Any = initialUrl,
         useDarkTheme: Boolean = isSystemInDarkMode(),
+        isLoggedIn: Boolean = false,
+        onLoginClick: () -> Unit = {},
+        onLogoutClick: () -> Unit = {},
+        onOpenStories: () -> Unit = {},
         settings: AppSettings = AppSettings(this),
         selectedFolderName: String = settings.downloadFolderName,
         onChooseFolder: () -> Unit = {},
@@ -197,7 +252,8 @@ class MainActivity : ComponentActivity() {
         val folderAccessLostError = stringResource(R.string.error_folder_access_lost)
         val downloadFailedError = stringResource(R.string.error_download_failed)
 
-        val isStory = isStoryUrl(url.trim())
+        val isStory = InstagramDownloader.isStoryUrl(url.trim())
+        val needsStoryLogin = isStory && !isLoggedIn
 
         val igGradient = Brush.verticalGradient(
             colors = if (useDarkTheme) {
@@ -209,7 +265,7 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(url, targetWidth) {
             val trimmed = url.trim()
-            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || isStoryUrl(trimmed) ||
+            if (trimmed.isBlank() || !isValidInstagramUrl(trimmed) || InstagramDownloader.isStoryUrl(trimmed) ||
                 InstagramDownloader.isProfileUrl(trimmed)) {
                 media = null
                 return@LaunchedEffect
@@ -239,6 +295,9 @@ class MainActivity : ComponentActivity() {
             SettingsDialog(
                 settings = settings,
                 selectedFolderName = selectedFolderName,
+                isLoggedIn = isLoggedIn,
+                onLoginClick = onLoginClick,
+                onLogoutClick = onLogoutClick,
                 onChooseFolder = onChooseFolder,
                 onThemeChanged = onThemeChanged,
                 onDismiss = {
@@ -408,14 +467,20 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
-                                        stringResource(R.string.story_not_supported_title),
+                                        stringResource(
+                                            if (needsStoryLogin) R.string.story_login_title
+                                            else R.string.story_available_title
+                                        ),
                                         style = MaterialTheme.typography.labelLarge.copy(
                                             color = IgOrange,
                                             fontWeight = FontWeight.Bold
                                         )
                                     )
                                     Text(
-                                        stringResource(R.string.story_not_supported_body),
+                                        stringResource(
+                                            if (needsStoryLogin) R.string.story_login_body
+                                            else R.string.story_available_body
+                                        ),
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             color = colorScheme.onSurfaceVariant
                                         ),
@@ -425,7 +490,38 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        Button(
+                        if (isStory) {
+                            Button(
+                                onClick = {
+                                    if (needsStoryLogin) onLoginClick() else onOpenStories()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                enabled = !isSaving,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = IgOrange,
+                                    contentColor = Color.White,
+                                ),
+                            ) {
+                                Icon(
+                                    imageVector = if (needsStoryLogin) AppIcons.Login else AppIcons.Image,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    stringResource(
+                                        if (needsStoryLogin) R.string.login_to_instagram_button
+                                        else R.string.view_active_stories_button
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                )
+                            }
+                        } else Button(
                             onClick = {
                                 val trimmed = url.trim()
                                 when {
@@ -493,7 +589,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp),
-                            enabled = !isSaving && !isStory && media?.size != deselectedIndices.size,
+                            enabled = !isSaving && media?.size != deselectedIndices.size,
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = IgPink,
@@ -819,6 +915,9 @@ class MainActivity : ComponentActivity() {
     private fun SettingsDialog(
         settings: AppSettings,
         selectedFolderName: String,
+        isLoggedIn: Boolean,
+        onLoginClick: () -> Unit,
+        onLogoutClick: () -> Unit,
         onChooseFolder: () -> Unit,
         onThemeChanged: (AppTheme) -> Unit,
         onDismiss: () -> Unit
@@ -837,6 +936,33 @@ class MainActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                 ) {
+                    SettingsHeading(stringResource(R.string.account_heading))
+                    Text(
+                        stringResource(
+                            if (isLoggedIn) R.string.status_logged_in else R.string.status_logged_out
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Button(
+                        onClick = {
+                            if (isLoggedIn) onLogoutClick() else onLoginClick()
+                            onDismiss()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (isLoggedIn) R.string.log_out_button else R.string.log_in_button
+                            )
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.login_required_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                     SettingsHeading(stringResource(R.string.download_location_heading))
                     Text(selectedFolderName, style = MaterialTheme.typography.bodyLarge)
                     OutlinedButton(
@@ -1059,12 +1185,7 @@ class MainActivity : ComponentActivity() {
     private fun isValidInstagramUrl(url: String): Boolean =
         Pattern.compile(
             "^https?://(www\\.)?(instagram\\.com|instagr\\.am)/(p|reel|tv)/[A-Za-z0-9_-]+"
-        ).matcher(url).find() || isStoryUrl(url) || InstagramDownloader.isProfileUrl(url)
-
-    private fun isStoryUrl(url: String): Boolean =
-        Pattern.compile(
-            "^https?://(www\\.)?instagram\\.com/stories/[A-Za-z0-9._]+"
-        ).matcher(url).find()
+        ).matcher(url).find() || InstagramDownloader.isStoryUrl(url) || InstagramDownloader.isProfileUrl(url)
 
     private fun checkPermissions(): Boolean =
         ContextCompat.checkSelfPermission(

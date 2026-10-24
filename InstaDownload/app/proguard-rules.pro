@@ -25,5 +25,10 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 
+# EncryptedSharedPreferences uses Tink-backed crypto implementations that need
+# to remain discoverable in minified releases.
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

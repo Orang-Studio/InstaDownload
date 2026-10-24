@@ -61,7 +61,6 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = false
-        unitTests.all { it.enabled = false }   // disable unit tests
     }
 }
 
@@ -94,6 +93,7 @@ dependencies {
 
     // HTTP client for network requests
     implementation(libs.okhttp)
+    implementation(libs.androidx.security.crypto)
     debugImplementation(libs.logging.interceptor)
 
     // Coroutines
@@ -101,7 +101,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     // Testing dependencies
-    //testImplementation(libs.junit)
+    testImplementation(libs.junit)
     //testImplementation(libs.kotlinx.coroutines.test)
     //testImplementation(libs.androidx.core.testing)
 
