@@ -163,4 +163,5 @@ For bugs or feature requests, use [GitHub Issues](https://github.com/Orang-Studi
 - Platform: Android; IOS
 - Official Source Stores: Github; Fdroid; Gplay
 - InstaDownload is available under the [GPLv3 License](LICENSE)
+- Works in 2026
 - Made by human and AI for API reverse engineering 🧡
