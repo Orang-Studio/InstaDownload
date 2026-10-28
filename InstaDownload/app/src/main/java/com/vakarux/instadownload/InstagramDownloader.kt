@@ -6,6 +6,7 @@ import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okio.ByteString.Companion.encodeUtf8
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -135,7 +136,6 @@ object InstagramDownloader {
         val preview = images.pick(minOf(targetWidth, 640))?.optString("url")
             ?: item.optString("display_url").takeIf { it.isNotBlank() }
 
-        android.util.Log.d("IGDBG", "keys=" + item.keys().asSequence().joinToString() + " vid0=" + videos?.optJSONObject(0) + " img0=" + images?.optJSONObject(0))
         val video = videos.pick(targetWidth)
         val chosen = video ?: images.pick(targetWidth)
             ?: return preview?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
@@ -334,20 +334,26 @@ object InstagramDownloader {
                 .get().build()
         ).execute()
 
-        val html = response.body?.string()
-            ?: throw Exception("Post HTTP ${response.code}: empty body")
-        if (!response.isSuccessful) throw Exception("Post HTTP ${response.code}")
-
-        val expectedMediaId = shortcodeToMediaId(post.shortcode)
-        Regex("""<script\b[^>]*\bdata-sjs[^>]*>(\{.+?\})</script>""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(html)
-            .mapNotNull { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() }
-            .mapNotNull { findPublicProduct(it, expectedMediaId) }
-            .map { extractProductMedia(it, targetWidth, postBaseName(it, post.shortcode), postMeta(it, post)) }
-            .firstOrNull { it.isNotEmpty() }
-            ?.let { return it }
+        response.use {
+            if (!response.isSuccessful) throw Exception("Post HTTP ${response.code}")
+            val source = response.body?.source() ?: throw Exception("Post HTTP ${response.code}: empty body")
+            val expectedMediaId = shortcodeToMediaId(post.shortcode)
+            while (true) {
+                val end = source.indexOf(SCRIPT_END)
+                if (end == -1L) break
+                val chunk = source.readUtf8(end + SCRIPT_END.size)
+                if (!chunk.contains(expectedMediaId)) continue
+                val json = SJS_SCRIPT.find(chunk)?.let { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() } ?: continue
+                val product = findPublicProduct(json, expectedMediaId) ?: continue
+                extractProductMedia(product, targetWidth, postBaseName(product, post.shortcode), postMeta(product, post))
+                    .takeIf { it.isNotEmpty() }?.let { return it }
+            }
+        }
         throw Exception("Post HTTP ${response.code}: no public media found")
     }
+
+    private val SCRIPT_END = "</script>".encodeUtf8()
+    private val SJS_SCRIPT = Regex("""<script\b[^>]*\bdata-sjs[^>]*>(\{.+?\})</script>""", RegexOption.DOT_MATCHES_ALL)
 
     private fun findPublicProduct(value: Any?, expectedMediaId: String): JSONObject? {
         when (value) {

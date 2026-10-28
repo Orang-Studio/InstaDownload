@@ -94,6 +94,7 @@ dependencies {
 
     // HTTP client for network requests
     implementation(libs.okhttp)
+    implementation(libs.telephoto.zoomable)
     debugImplementation(libs.logging.interceptor)
 
     // Coroutines

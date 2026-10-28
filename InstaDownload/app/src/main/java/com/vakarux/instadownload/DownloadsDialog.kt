@@ -583,12 +583,7 @@ private fun ColumnScope.ImagePreview(record: DownloadRecord) {
     MediaFrame {
         when {
             result == null -> CircularProgressIndicator(color = Color.White)
-            result?.isSuccess == true -> Image(
-                bitmap = result!!.getOrThrow(),
-                contentDescription = stringResource(R.string.image_preview_description),
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
-            )
+            result?.isSuccess == true -> ZoomableBitmap(result!!.getOrThrow())
             else -> Text(
                 stringResource(R.string.preview_unavailable),
                 color = Color.White,

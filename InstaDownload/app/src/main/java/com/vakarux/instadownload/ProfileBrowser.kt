@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -50,6 +51,9 @@ import com.vakarux.instadownload.ui.AppIcons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.saket.telephoto.zoomable.ZoomableContentLocation
+import me.saket.telephoto.zoomable.rememberZoomableState
+import me.saket.telephoto.zoomable.zoomable
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -618,6 +622,11 @@ private fun PostPreview(post: ProfilePost, targetWidth: Int, onDismiss: () -> Un
             }.getOrNull()
         }
     }
+    MediaViewer(items, post.previewUrl, onDismiss = onDismiss)
+}
+
+@Composable
+internal fun MediaViewer(items: List<MediaResult>?, placeholderUrl: String?, initialPage: Int = 0, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             contentAlignment = Alignment.Center,
@@ -626,16 +635,15 @@ private fun PostPreview(post: ProfilePost, targetWidth: Int, onDismiss: () -> Un
                 .background(Color.Black)
                 .clickable(interactionSource = null, indication = null, onClick = onDismiss)
         ) {
-            val loaded = items
-            if (loaded.isNullOrEmpty()) {
-                rememberThumbnail(post.previewUrl)?.let {
+            if (items.isNullOrEmpty()) {
+                rememberThumbnail(placeholderUrl)?.let {
                     Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
                 }
-                if (loaded == null) CircularProgressIndicator(color = Color.White)
+                if (items == null) CircularProgressIndicator(color = Color.White)
                 return@Box
             }
-            HorizontalPager(state = rememberPagerState { loaded.size }, modifier = Modifier.fillMaxSize()) { page ->
-                val item = loaded[page]
+            HorizontalPager(state = rememberPagerState(initialPage) { items.size }, modifier = Modifier.fillMaxSize()) { page ->
+                val item = items[page]
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     if (item.isVideo) {
                         AndroidView(
@@ -653,16 +661,29 @@ private fun PostPreview(post: ProfilePost, targetWidth: Int, onDismiss: () -> Un
                         )
                     } else {
                         (rememberThumbnail(item.url, downsample = false) ?: rememberThumbnail(item.previewUrl))?.let {
-                            Image(
-                                it,
-                                contentDescription = stringResource(R.string.image_preview_description),
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            ZoomableBitmap(it, onClick = onDismiss)
                         }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+internal fun ZoomableBitmap(bitmap: ImageBitmap, onClick: (() -> Unit)? = null) {
+    val state = rememberZoomableState()
+    LaunchedEffect(bitmap) {
+        state.setContentLocation(
+            ZoomableContentLocation.scaledInsideAndCenterAligned(Size(bitmap.width.toFloat(), bitmap.height.toFloat()))
+        )
+    }
+    Image(
+        bitmap,
+        contentDescription = stringResource(R.string.image_preview_description),
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .fillMaxSize()
+            .zoomable(state, onClick = onClick?.let { { _ -> it() } })
+    )
 }

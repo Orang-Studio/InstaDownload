@@ -172,6 +172,7 @@ class MainActivity : ComponentActivity() {
         var fullError by remember { mutableStateOf<String?>(null) }
         var media by remember { mutableStateOf<List<MediaResult>?>(null) }
         var deselectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
+        var viewerIndex by remember { mutableStateOf<Int?>(null) }
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
         var targetWidth by remember { mutableIntStateOf(settings.targetWidth()) }
@@ -233,6 +234,10 @@ class MainActivity : ComponentActivity() {
             }
             hapticStart(context, settings.hapticsEnabled)
             media = items.getOrThrow()
+        }
+
+        viewerIndex?.let { index ->
+            media?.let { MediaViewer(it, null, index) { viewerIndex = null } }
         }
 
         if (showSettings) {
@@ -597,7 +602,8 @@ class MainActivity : ComponentActivity() {
                                         onToggleSelected = {
                                             deselectedIndices = if (index in deselectedIndices)
                                                 deselectedIndices - index else deselectedIndices + index
-                                        }
+                                        },
+                                        onOpen = { viewerIndex = index }
                                     )
                                 }
                             }
@@ -950,7 +956,8 @@ class MainActivity : ComponentActivity() {
         item: MediaResult,
         isCarousel: Boolean = false,
         isSelected: Boolean = true,
-        onToggleSelected: () -> Unit = {}
+        onToggleSelected: () -> Unit = {},
+        onOpen: () -> Unit = {}
     ) {
         val previewUrl = item.previewUrl
         var loadFailed by remember(previewUrl) { mutableStateOf(false) }
@@ -988,7 +995,7 @@ class MainActivity : ComponentActivity() {
                     .size(width = 120.dp, height = 150.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.Black.copy(alpha = 0.15f))
-                    .clickable(enabled = isCarousel, onClick = onToggleSelected),
+                    .clickable(onClick = onOpen),
                 contentAlignment = Alignment.Center
             ) {
                 val bmp = bitmap
