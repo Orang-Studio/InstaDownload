@@ -42,6 +42,8 @@
     <string name="saved_label">Saved!</string>
     <string name="download_label">Download</string>
     <string name="downloads_label">Downloads</string>
+    <string name="tab_downloader">Downloader</string>
+    <string name="tab_file_manager">File Manager</string>
     <string name="downloads_title">Downloads</string>
     <string name="downloads_empty">Nothing downloaded yet.</string>
     <string name="downloads_empty_hint">Download a reel or post to see it here.</string>

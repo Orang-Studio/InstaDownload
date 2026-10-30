@@ -31,6 +31,13 @@ object AppIcons {
         )
     }
 
+    val Folder: ImageVector by lazy {
+        materialIcon(
+            "Folder",
+            "M10,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z"
+        )
+    }
+
     val Download: ImageVector by lazy {
         materialIcon("Download", "M5,20h14v-2H5V20zM19,9h-4V3H9v6H5l7,7L19,9z")
     }
@@ -105,6 +112,41 @@ object AppIcons {
                 "c1.1,0 2,-0.9 2,-2V4C22,2.9 21.1,2 20,2zM12,14.5v-9l6,4.5L12,14.5z"
         )
     }
+
+    val Visibility: ImageVector by lazy {
+        materialIcon(
+            "Visibility",
+            "M12,4.5C7,4.5 2.73,7.61 1,12c1.73,4.39 6,7.5 11,7.5s9.27,-3.11 11,-7.5c-1.73,-4.39 -6,-7.5 -11,-7.5z" +
+                "M12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5zM12,9c-1.66,0 -3,1.34 -3,3" +
+                "s1.34,3 3,3 3,-1.34 3,-3 -1.34,-3 -3,-3z"
+        )
+    }
+
+    val OpenInNew: ImageVector by lazy {
+        materialIcon(
+            "OpenInNew",
+            "M19,19H5V5h7V3H5c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2v-7h-2v7z" +
+                "M14,3v2h3.59l-9.83,9.83 1.41,1.41L19,6.41V10h2V3h-7z"
+        )
+    }
+
+    val Share: ImageVector by lazy {
+        materialIcon(
+            "Share",
+            "M18,16.08c-0.76,0 -1.44,0.3 -1.96,0.77L8.91,12.7c0.05,-0.23 0.09,-0.46 0.09,-0.7" +
+                "s-0.04,-0.47 -0.09,-0.7l7.05,-4.11c0.54,0.5 1.25,0.81 2.04,0.81 1.66,0 3,-1.34 3,-3" +
+                "s-1.34,-3 -3,-3 -3,1.34 -3,3c0,0.24 0.04,0.47 0.09,0.7L8.04,9.81C7.5,9.31 6.79,9 6,9" +
+                "c-1.66,0 -3,1.34 -3,3s1.34,3 3,3c0.79,0 1.5,-0.31 2.04,-0.81l7.12,4.16c-0.05,0.21 -0.08,0.43 -0.08,0.65" +
+                " 0,1.61 1.31,2.92 2.92,2.92s2.92,-1.31 2.92,-2.92c0,-1.61 -1.31,-2.92 -2.92,-2.92z"
+        )
+    }
+
+    val Delete: ImageVector by lazy {
+        materialIcon(
+            "Delete",
+            "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z"
+        )
+    }
 }
 
 private fun materialIcon(name: String, pathData: String): ImageVector =
@@ -117,3 +159,6 @@ private fun materialIcon(name: String, pathData: String): ImageVector =
     )
         .addPath(addPathNodes(pathData), fill = SolidColor(Color.Black))
         .build()
+
+val Download: ImageVector get() = AppIcons.Download
+val Folder: ImageVector get() = AppIcons.Folder

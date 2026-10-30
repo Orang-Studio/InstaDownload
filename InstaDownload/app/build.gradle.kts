@@ -20,7 +20,11 @@ android {
             useSupportLibrary = true
         }
 
-        resourceConfigurations += listOf("en")
+        // Removed deprecated resourceConfigurations
+    }
+
+    androidResources {
+        localeFilters += listOf("en")
     }
 
     buildTypes {

@@ -69,7 +69,7 @@
         </activity>
 
         <service
-            android:name=".QuickDownloadService"
+            android:name=".service.QuickDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

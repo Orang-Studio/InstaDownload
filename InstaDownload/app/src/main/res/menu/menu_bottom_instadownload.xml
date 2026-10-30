@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_downloader"
+        android:title="@string/tab_downloader"
+        android:icon="@drawable/ic_download_24dp" />
+    <item
+        android:id="@+id/nav_file_manager"
+        android:title="@string/tab_file_manager"
+        android:icon="@drawable/ic_folder_24dp" />
+</menu>
+

@@ -1,9 +1,16 @@
-package com.vakarux.instadownload
+package com.vakarux.instadownload.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
+
+val LocalDarkTheme = compositionLocalOf { false }
+
+@Composable
+fun isAppInDarkTheme(): Boolean = LocalDarkTheme.current
 
 private val LightColors = lightColorScheme(
     primary = Color(0xFFE91E63),
@@ -101,9 +108,11 @@ fun InstaDownloadTheme(
         else -> LightColors
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography(),
-        content = content
-    )
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography(),
+            content = content
+        )
+    }
 }
