@@ -171,10 +171,7 @@ class MainActivity : ComponentActivity() {
                             ),
                             selectedIndex = selectedTab,
                             onItemSelected = { selectedTab = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
-                                .navigationBarsPadding(),
+                            modifier = Modifier.fillMaxWidth(),
                             backgroundColor = MaterialTheme.colorScheme.surfaceContainer,
                             indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
                             itemIconTintActive = MaterialTheme.colorScheme.primary
