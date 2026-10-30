@@ -31,6 +31,13 @@ object AppIcons {
         )
     }
 
+    val Folder: ImageVector by lazy {
+        materialIcon(
+            "Folder",
+            "M10,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z"
+        )
+    }
+
     val Download: ImageVector by lazy {
         materialIcon("Download", "M5,20h14v-2H5V20zM19,9h-4V3H9v6H5l7,7L19,9z")
     }

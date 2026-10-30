@@ -147,4 +147,6 @@
     <string name="reset_filters_label">Reset</string>
     <string name="clear_label">Clear</string>
     <string name="cancel_label">Cancel</string>
+    <string name="tab_downloader">Downloader</string>
+    <string name="tab_file_manager">File Manager</string>
 </resources>

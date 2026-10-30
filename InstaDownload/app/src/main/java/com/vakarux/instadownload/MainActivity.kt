@@ -16,6 +16,19 @@ import android.text.format.Formatter
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
+import androidx.core.view.WindowCompat
+import me.ibrahimsn.smoothbottombar.SmoothBarItem
+import me.ibrahimsn.smoothbottombar.SmoothBottomBar
+
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -105,6 +118,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
         if (savedInstanceState == null) showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
@@ -117,21 +132,81 @@ class MainActivity : ComponentActivity() {
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
             }
-            InstaDownloadTheme(darkTheme = useDarkTheme) {
-                InstagramDownloaderScreen(
-                    initialUrl = sharedUrl.value.url,
-                    initialUrlKey = sharedUrl.value,
-                    useDarkTheme = useDarkTheme,
-                    settings = settings,
-                    selectedFolderName = selectedFolderName.value,
-                    onChooseFolder = { folderPickerLauncher.launch(null) },
-                    onThemeChanged = { selectedTheme = it },
-                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
-                    onOpenLibrary = { showLibrary.value = true },
-                    onDownloadsSaved = { showLibrary.value = true }
-                )
+            var selectedTab by remember { mutableIntStateOf(if (showLibrary.value) 1 else 0) }
+
+            LaunchedEffect(showLibrary.value) {
                 if (showLibrary.value) {
-                    DownloadsDialog(onDismiss = { showLibrary.value = false })
+                    selectedTab = 1
+                    showLibrary.value = false
+                }
+            }
+
+            val view = LocalView.current
+            val activity = view.context as? ComponentActivity
+            LaunchedEffect(selectedTab, useDarkTheme) {
+                if (activity != null) {
+                    val window = activity.window
+                    val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                    insetsController.isAppearanceLightStatusBars = if (selectedTab == 0) false else !useDarkTheme
+                }
+            }
+
+            BackHandler(enabled = selectedTab == 1) {
+                selectedTab = 0
+            }
+
+            InstaDownloadTheme(darkTheme = useDarkTheme) {
+                Scaffold(
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    bottomBar = {
+                        SmoothBottomBar(
+                            items = listOf(
+                                SmoothBarItem(
+                                    icon = painterResource(R.drawable.ic_download_24dp),
+                                    label = stringResource(R.string.tab_downloader)
+                                ),
+                                SmoothBarItem(
+                                    icon = rememberVectorPainter(AppIcons.Folder),
+                                    label = stringResource(R.string.tab_file_manager)
+                                )
+                            ),
+                            selectedIndex = selectedTab,
+                            onItemSelected = { selectedTab = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            backgroundColor = MaterialTheme.colorScheme.surfaceContainer,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
+                            itemIconTintActive = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = innerPadding.calculateBottomPadding())
+                    ) {
+                        Crossfade(targetState = selectedTab, label = "TabSwitch") { tab ->
+                            if (tab == 0) {
+                                InstagramDownloaderScreen(
+                                    initialUrl = sharedUrl.value.url,
+                                    initialUrlKey = sharedUrl.value,
+                                    useDarkTheme = useDarkTheme,
+                                    settings = settings,
+                                    selectedFolderName = selectedFolderName.value,
+                                    onChooseFolder = { folderPickerLauncher.launch(null) },
+                                    onThemeChanged = { selectedTheme = it },
+                                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
+                                    onOpenLibrary = { selectedTab = 1 },
+                                    onDownloadsSaved = { selectedTab = 1 }
+                                )
+                            } else {
+                                DownloadsScreen(
+                                    settings = settings,
+                                    onChooseFolder = { folderPickerLauncher.launch(null) },
+                                    onDismiss = { selectedTab = 0 }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -256,6 +331,7 @@ class MainActivity : ComponentActivity() {
 
         Scaffold(
             containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             modifier = Modifier
                 .background(igGradient)
                 .imePadding()
@@ -723,10 +799,11 @@ class MainActivity : ComponentActivity() {
 
             Row(
                 modifier = Modifier
-                    .padding(innerPadding)
                     .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.End
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onOpenLibrary) {
                     Text(
