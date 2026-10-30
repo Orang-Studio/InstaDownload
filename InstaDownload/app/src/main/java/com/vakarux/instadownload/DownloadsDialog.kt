@@ -13,6 +13,7 @@ import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.widget.Toast
 import android.widget.VideoView
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.Image
@@ -114,139 +115,170 @@ private val DownloadRecord.kind: DownloadKind
     }
 
 @Composable
-fun DownloadsDialog(onDismiss: () -> Unit) {
+fun DownloadsScreen(
+    settings: AppSettings? = null,
+    onChooseFolder: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     var records by remember { mutableStateOf(DownloadHistory.load(context)) }
     var previewRecord by remember { mutableStateOf<DownloadRecord?>(null) }
     var selectedKind by remember { mutableStateOf(DownloadKind.ALL) }
     var fullscreen by remember { mutableStateOf(false) }
 
-    Dialog(
-        onDismissRequest = {
-            if (fullscreen) fullscreen = false
-            else if (previewRecord != null) previewRecord = null
-            else onDismiss()
-        },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    LaunchedEffect(Unit) {
+        records = DownloadHistory.load(context)
+    }
+
+    BackHandler(enabled = previewRecord != null) {
+        if (fullscreen) fullscreen = false
+        else previewRecord = null
+    }
+
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = if (fullscreen) Color.Black else MaterialTheme.colorScheme.background
     ) {
-        val view = LocalView.current
-        LaunchedEffect(fullscreen) {
-            val window = (view.parent as? DialogWindowProvider)?.window ?: return@LaunchedEffect
-            WindowCompat.getInsetsController(window, view).run {
-                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                if (fullscreen) hide(WindowInsetsCompat.Type.systemBars())
-                else show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        Surface(
-            modifier = Modifier.fillMaxSize()
-                .then(if (fullscreen) Modifier else Modifier.statusBarsPadding().navigationBarsPadding()),
-            color = if (fullscreen) Color.Black else MaterialTheme.colorScheme.background
-        ) {
-            Column {
-                if (!fullscreen) Row(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        stringResource(if (previewRecord == null) R.string.downloads_title else R.string.preview_label),
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.weight(1f).padding(start = 20.dp, top = 16.dp, bottom = 12.dp)
-                    )
-                    if (previewRecord == null) {
-                        IconButton(
-                            onClick = { records = DownloadHistory.load(context) },
-                            modifier = Modifier.padding(top = 8.dp)
+        Column {
+            if (!fullscreen) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = AppIcons.Refresh,
-                                contentDescription = stringResource(R.string.refresh_downloads_label)
-                            )
-                        }
-                    }
-                    TextButton(onClick = {
-                        if (previewRecord == null) onDismiss() else previewRecord = null
-                    }, modifier = Modifier.padding(top = 8.dp, end = 12.dp)) {
-                        Text(stringResource(if (previewRecord == null) R.string.close_label else R.string.back_label))
-                    }
-                }
-                val record = previewRecord
-                if (record != null) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .then(if (fullscreen) Modifier else Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
-                    ) { MediaPreview(record, fullscreen) { fullscreen = it } }
-                } else {
-                    ScrollableTabRow(
-                        selectedTabIndex = selectedKind.ordinal,
-                        edgePadding = 12.dp
-                    ) {
-                        DownloadKind.entries.forEach { kind ->
-                            Tab(
-                                selected = selectedKind == kind,
-                                onClick = { selectedKind = kind },
-                                text = { Text(stringResource(kind.labelRes)) }
-                            )
-                        }
-                    }
-                    val visibleRecords = records.filter {
-                        selectedKind == DownloadKind.ALL || it.kind == selectedKind
-                    }
-                    if (visibleRecords.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = AppIcons.VideoLibrary,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(56.dp)
-                                )
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    if (records.isEmpty()) stringResource(R.string.downloads_empty)
-                                    else stringResource(
-                                        R.string.downloads_empty_kind,
-                                        stringResource(selectedKind.labelRes)
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.padding(top = 16.dp)
+                                    text = stringResource(R.string.tab_file_manager),
+                                    style = MaterialTheme.typography.titleLarge
                                 )
-                                if (records.isEmpty()) {
-                                    Text(
-                                        stringResource(R.string.downloads_empty_hint),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.padding(top = 6.dp)
+                                val folderName = settings?.downloadFolderName ?: AppSettings.DEFAULT_FOLDER_NAME
+                                val visibleCount = records.count { selectedKind == DownloadKind.ALL || it.kind == selectedKind }
+                                Text(
+                                    text = "$folderName • $visibleCount items",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { records = DownloadHistory.load(context) }) {
+                                    Icon(
+                                        imageVector = AppIcons.Refresh,
+                                        contentDescription = stringResource(R.string.refresh_downloads_label)
                                     )
+                                }
+                                if (onChooseFolder != null) {
+                                    TextButton(onClick = onChooseFolder) {
+                                        Text(stringResource(R.string.choose_folder_button))
+                                    }
+                                } else if (onDismiss != null) {
+                                    TextButton(onClick = onDismiss) {
+                                        Text(stringResource(R.string.close_label))
+                                    }
                                 }
                             }
                         }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                    }
+                }
+            }
+
+            val record = previewRecord
+            if (record != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .then(if (fullscreen) Modifier else Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
+                ) { MediaPreview(record, fullscreen) { fullscreen = it } }
+            } else {
+                ScrollableTabRow(
+                    selectedTabIndex = selectedKind.ordinal,
+                    edgePadding = 12.dp
+                ) {
+                    DownloadKind.entries.forEach { kind ->
+                        Tab(
+                            selected = selectedKind == kind,
+                            onClick = { selectedKind = kind },
+                            text = { Text(stringResource(kind.labelRes)) }
+                        )
+                    }
+                }
+                val visibleRecords = records.filter {
+                    selectedKind == DownloadKind.ALL || it.kind == selectedKind
+                }
+                if (visibleRecords.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp)
                         ) {
-                            items(visibleRecords, key = { it.uri }) { record ->
-                                DownloadRow(
-                                    record = record,
-                                    onPreview = { previewRecord = record },
-                                    onDeleted = {
-                                        DownloadHistory.remove(context, record)
-                                        records = records.filterNot { it.uri == record.uri }
-                                    }
+                            Icon(
+                                imageVector = AppIcons.VideoLibrary,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Text(
+                                if (records.isEmpty()) stringResource(R.string.downloads_empty)
+                                else stringResource(
+                                    R.string.downloads_empty_kind,
+                                    stringResource(selectedKind.labelRes)
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(top = 16.dp)
+                            )
+                            if (records.isEmpty()) {
+                                Text(
+                                    stringResource(R.string.downloads_empty_hint),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(top = 6.dp)
                                 )
                             }
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(visibleRecords, key = { it.uri }) { recordItem ->
+                            DownloadRow(
+                                record = recordItem,
+                                onPreview = { previewRecord = recordItem },
+                                onDeleted = {
+                                    DownloadHistory.remove(context, recordItem)
+                                    records = records.filterNot { it.uri == recordItem.uri }
+                                }
+                            )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun DownloadsDialog(onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        DownloadsScreen(onDismiss = onDismiss)
     }
 }
 
