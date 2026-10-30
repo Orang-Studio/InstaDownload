@@ -11,7 +11,7 @@ android {
         applicationId = "com.oranges.instadownload"
         minSdk = 24  // Android 7.0 (Nougat)
         targetSdk = 36
-        versionCode = 21
+        versionCode = 22
         versionName = "3.1.0-stories"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
