@@ -26,6 +26,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -114,7 +115,7 @@ class MainActivity : ComponentActivity() {
         loggedIn.value = sessionStore.isLoggedIn
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
-        showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
+        if (savedInstanceState == null) showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
 
         setContent {
             val settings = appSettings
@@ -189,6 +190,7 @@ class MainActivity : ComponentActivity() {
         var fullError by remember { mutableStateOf<String?>(null) }
         var media by remember { mutableStateOf<List<MediaResult>?>(null) }
         var deselectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
+        var viewerIndex by remember { mutableStateOf<Int?>(null) }
         var downloadComplete by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
         var targetWidth by remember { mutableIntStateOf(settings.targetWidth()) }
@@ -208,6 +210,11 @@ class MainActivity : ComponentActivity() {
         val coroutineScope = rememberCoroutineScope()
         val colorScheme = MaterialTheme.colorScheme
         val uriHandler = LocalUriHandler.current
+        val genericError = stringResource(R.string.error_generic)
+        val emptyUrlError = stringResource(R.string.error_empty_url)
+        val invalidUrlError = stringResource(R.string.error_invalid_url)
+        val folderAccessLostError = stringResource(R.string.error_folder_access_lost)
+        val downloadFailedError = stringResource(R.string.error_download_failed)
 
         val needsLogin = isStoryUrl(url.trim()) && !isLoggedIn
 
@@ -240,11 +247,15 @@ class MainActivity : ComponentActivity() {
             }
             isLoading = false
             if (items.isFailure) {
-                fullError = items.exceptionOrNull()?.message ?: context.getString(R.string.error_generic)
+                fullError = items.exceptionOrNull()?.message ?: genericError
                 return@LaunchedEffect
             }
             hapticStart(context, settings.hapticsEnabled)
             media = items.getOrThrow()
+        }
+
+        viewerIndex?.let { index ->
+            media?.let { MediaViewer(it, null, index) { viewerIndex = null } }
         }
 
         if (showSettings) {
@@ -473,9 +484,9 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 val trimmed = url.trim()
                                 when {
-                                    trimmed.isBlank() -> urlError = context.getString(R.string.error_empty_url)
+                                    trimmed.isBlank() -> urlError = emptyUrlError
                                     !isValidInstagramUrl(trimmed) ->
-                                        urlError = context.getString(R.string.error_invalid_url)
+                                        urlError = invalidUrlError
                                     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                                             && !checkPermissions() -> requestPermissions()
                                     InstagramDownloader.isProfileUrl(trimmed) ->
@@ -492,7 +503,7 @@ class MainActivity : ComponentActivity() {
                                             isLoading = false
                                             if (fetched.isFailure) {
                                                 fullError = fetched.exceptionOrNull()?.message
-                                                    ?: context.getString(R.string.error_generic)
+                                                    ?: genericError
                                                 return@launch
                                             }
                                             fetched.getOrThrow().also { media = it }
@@ -520,7 +531,7 @@ class MainActivity : ComponentActivity() {
                                             hapticComplete(context, settings.hapticsEnabled)
                                             downloadComplete = true
                                             if (fellBackToDefaultFolder) {
-                                                fullError = context.getString(R.string.error_folder_access_lost)
+                                                fullError = folderAccessLostError
                                             }
                                             delay(2500)
                                             downloadComplete = false
@@ -529,7 +540,7 @@ class MainActivity : ComponentActivity() {
                                             onDownloadsSaved()
                                         } else {
                                             fullError = dlResult.exceptionOrNull()?.message
-                                                ?: context.getString(R.string.error_download_failed)
+                                                ?: downloadFailedError
                                         }
                                     }
                                 }
@@ -641,7 +652,8 @@ class MainActivity : ComponentActivity() {
                                         onToggleSelected = {
                                             deselectedIndices = if (index in deselectedIndices)
                                                 deselectedIndices - index else deselectedIndices + index
-                                        }
+                                        },
+                                        onOpen = { viewerIndex = index }
                                     )
                                 }
                             }
@@ -1014,7 +1026,8 @@ class MainActivity : ComponentActivity() {
         item: MediaResult,
         isCarousel: Boolean = false,
         isSelected: Boolean = true,
-        onToggleSelected: () -> Unit = {}
+        onToggleSelected: () -> Unit = {},
+        onOpen: () -> Unit = {}
     ) {
         val previewUrl = item.previewUrl
         var loadFailed by remember(previewUrl) { mutableStateOf(false) }
@@ -1052,7 +1065,7 @@ class MainActivity : ComponentActivity() {
                     .size(width = 120.dp, height = 150.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.Black.copy(alpha = 0.15f))
-                    .clickable(enabled = isCarousel, onClick = onToggleSelected),
+                    .combinedClickable(onClick = if (isCarousel) onToggleSelected else onOpen, onLongClick = onOpen),
                 contentAlignment = Alignment.Center
             ) {
                 val bmp = bitmap

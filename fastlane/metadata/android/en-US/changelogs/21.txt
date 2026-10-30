@@ -1,0 +1,1 @@
+Profile downloads now run in the background with a progress notification (a Live Update on Android 16) and can be saved to their own folder. Rotating no longer interrupts them.

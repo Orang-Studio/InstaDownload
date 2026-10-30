@@ -11,8 +11,8 @@ android {
         applicationId = "com.oranges.instadownload"
         minSdk = 24  // Android 7.0 (Nougat)
         targetSdk = 36
-        versionCode = 20
-        versionName = "3.0.0-stories"
+        versionCode = 21
+        versionName = "3.1.0-stories"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -94,6 +94,7 @@ dependencies {
 
     // HTTP client for network requests
     implementation(libs.okhttp)
+    implementation(libs.telephoto.zoomable)
     debugImplementation(libs.logging.interceptor)
 
     implementation(libs.androidx.security.crypto)

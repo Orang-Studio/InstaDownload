@@ -6,6 +6,7 @@ import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okio.ByteString.Companion.encodeUtf8
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -18,6 +19,11 @@ data class PostMeta(
     val url: String,
     val song: String?,
     val takenAtSec: Long,
+)
+
+private data class InstagramPostRef(
+    val route: String,
+    val shortcode: String,
 )
 
 data class MediaResult(
@@ -52,7 +58,7 @@ private class StaleQueryException(message: String) : Exception(message)
 object InstagramDownloader {
 
     private val SHORTCODE_REGEX = Pattern.compile(
-        "(?:instagram\\.com|instagr\\.am)/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)"
+        "(?:instagram\\.com|instagr\\.am)/(reel|reels|p|tv)/([A-Za-z0-9_-]+)"
     )
     private val STORY_REGEX = Pattern.compile(
         "(?:instagram\\.com|instagr\\.am)/stories/([A-Za-z0-9._]+)/([0-9]+)"
@@ -103,7 +109,7 @@ object InstagramDownloader {
             return tryMediaInfoApi(mediaId, s, targetWidth)
         }
 
-        val shortcode = extractShortcode(postUrl) ?: run {
+        val post = extractPostRef(postUrl) ?: run {
             extractProfileUsername(postUrl)?.let { username ->
                 return listOf(fetchProfilePicture(username))
             }
@@ -111,14 +117,14 @@ object InstagramDownloader {
         }
 
         val postPageError = try {
-            return tryPostPage(shortcode, targetWidth)
+            return tryPostPage(post, targetWidth)
         } catch (postFailure: Exception) {
             postFailure.message ?: postFailure.javaClass.simpleName
         }
 
         if (session != null) {
             try {
-                return tryMediaInfoApi(shortcodeToMediaId(shortcode), session, targetWidth)
+                return tryMediaInfoApi(shortcodeToMediaId(post.shortcode), session, targetWidth)
             } catch (e: Exception) {
                 throw Exception(
                     "Could not fetch this post.\n\n" +
@@ -161,7 +167,7 @@ object InstagramDownloader {
             ?: throw Exception("Media info HTTP ${resp.code}: ${json.optString("message").ifBlank { "no media returned" }}")
 
         val code = item.optString("code").ifBlank { mediaId }
-        return extractProductMedia(item, targetWidth, postBaseName(item, code), postMeta(item, code))
+        return extractProductMedia(item, targetWidth, postBaseName(item, code), postMeta(item, InstagramPostRef("p", code)))
             .ifEmpty { throw Exception("Media info: no downloadable media") }
     }
 
@@ -189,7 +195,6 @@ object InstagramDownloader {
         val preview = images.pick(minOf(targetWidth, 640))?.optString("url")
             ?: item.optString("display_url").takeIf { it.isNotBlank() }
 
-        android.util.Log.d("IGDBG", "keys=" + item.keys().asSequence().joinToString() + " vid0=" + videos?.optJSONObject(0) + " img0=" + images?.optJSONObject(0))
         val video = videos.pick(targetWidth)
         val chosen = video ?: images.pick(targetWidth)
             ?: return preview?.let { MediaResult(it, isVideo = false, thumbnailUrl = it) }
@@ -380,28 +385,34 @@ object InstagramDownloader {
         return (h.toDoubleOrNull() ?: 0.0) * 3600 + (min.toDoubleOrNull() ?: 0.0) * 60 + (sec.toDoubleOrNull() ?: 0.0)
     }
 
-    private fun tryPostPage(shortcode: String, targetWidth: Int): List<MediaResult> {
+    private fun tryPostPage(post: InstagramPostRef, targetWidth: Int): List<MediaResult> {
         val response = client.newCall(
             Request.Builder()
-                .url("https://www.instagram.com/p/$shortcode/")
+                .url("https://www.instagram.com/${post.route}/${post.shortcode}/")
                 .header("User-Agent", "Googlebot/2.1 (+http://www.google.com/bot.html)")
                 .get().build()
         ).execute()
 
-        val html = response.body?.string()
-            ?: throw Exception("Post HTTP ${response.code}: empty body")
-        if (!response.isSuccessful) throw Exception("Post HTTP ${response.code}")
-
-        val expectedMediaId = shortcodeToMediaId(shortcode)
-        Regex("""<script\b[^>]*\bdata-sjs[^>]*>(\{.+?\})</script>""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(html)
-            .mapNotNull { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() }
-            .mapNotNull { findPublicProduct(it, expectedMediaId) }
-            .map { extractProductMedia(it, targetWidth, postBaseName(it, shortcode), postMeta(it, shortcode)) }
-            .firstOrNull { it.isNotEmpty() }
-            ?.let { return it }
+        response.use {
+            if (!response.isSuccessful) throw Exception("Post HTTP ${response.code}")
+            val source = response.body?.source() ?: throw Exception("Post HTTP ${response.code}: empty body")
+            val expectedMediaId = shortcodeToMediaId(post.shortcode)
+            while (true) {
+                val end = source.indexOf(SCRIPT_END)
+                if (end == -1L) break
+                val chunk = source.readUtf8(end + SCRIPT_END.size)
+                if (!chunk.contains(expectedMediaId)) continue
+                val json = SJS_SCRIPT.find(chunk)?.let { runCatching { JSONObject(it.groupValues[1]) }.getOrNull() } ?: continue
+                val product = findPublicProduct(json, expectedMediaId) ?: continue
+                extractProductMedia(product, targetWidth, postBaseName(product, post.shortcode), postMeta(product, post))
+                    .takeIf { it.isNotEmpty() }?.let { return it }
+            }
+        }
         throw Exception("Post HTTP ${response.code}: no public media found")
     }
+
+    private val SCRIPT_END = "</script>".encodeUtf8()
+    private val SJS_SCRIPT = Regex("""<script\b[^>]*\bdata-sjs[^>]*>(\{.+?\})</script>""", RegexOption.DOT_MATCHES_ALL)
 
     private fun findPublicProduct(value: Any?, expectedMediaId: String): JSONObject? {
         when (value) {
@@ -437,7 +448,7 @@ object InstagramDownloader {
             .joinToString("_")
     }
 
-    private fun postMeta(product: JSONObject, shortcode: String): PostMeta {
+    private fun postMeta(product: JSONObject, post: InstagramPostRef): PostMeta {
         val clips = product.optJSONObject("clips_metadata")
         val licensed = clips?.optJSONObject("music_info")?.optJSONObject("music_asset_info")
             ?.let { listOf(it.optString("display_artist"), it.optString("title")) }
@@ -446,7 +457,7 @@ object InstagramDownloader {
         return PostMeta(
             username = postUsername(product),
             caption = product.optJSONObject("caption")?.optString("text")?.takeIf { it.isNotBlank() },
-            url = "https://www.instagram.com/p/$shortcode/",
+            url = "https://www.instagram.com/${post.route}/${post.shortcode}/",
             song = (licensed ?: original)?.filter { it.isNotBlank() }?.joinToString(" - ")?.takeIf { it.isNotBlank() },
             takenAtSec = product.optLong("taken_at"),
         )
@@ -497,9 +508,14 @@ object InstagramDownloader {
         return response.body?.bytes() ?: throw Exception("Empty preview body")
     }
 
-    private fun extractShortcode(url: String): String? {
+    private fun extractPostRef(url: String): InstagramPostRef? {
         val m = SHORTCODE_REGEX.matcher(url)
-        return if (m.find()) m.group(1)!!.take(11) else null
+        return if (m.find()) {
+            InstagramPostRef(
+                route = m.group(1)!!,
+                shortcode = m.group(2)!!.take(11)
+            )
+        } else null
     }
 
 }
