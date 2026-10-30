@@ -47,7 +47,7 @@ fun SmoothBottomBar(
     backgroundColor: Color = MaterialTheme.colorScheme.surfaceContainer,
     indicatorColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
     indicatorRadius: Dp = 14.dp,
-    itemTextColor: Color = MaterialTheme.colorScheme.onSurface,
+    itemTextColor: Color = MaterialTheme.colorScheme.primary,
     itemTextSize: TextUnit = 12.sp,
     itemIconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     itemIconTintActive: Color = MaterialTheme.colorScheme.primary,
@@ -57,12 +57,15 @@ fun SmoothBottomBar(
     Surface(
         color = backgroundColor,
         tonalElevation = 3.dp,
-        modifier = modifier
+        shadowElevation = 8.dp,
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(64.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -87,6 +90,12 @@ fun SmoothBottomBar(
                     targetValue = if (isSelected) itemIconTintActive else itemIconTint,
                     animationSpec = tween(animDuration),
                     label = "SmoothBarItemIconTint"
+                )
+
+                val animatedTextColor by animateColorAsState(
+                    targetValue = if (isSelected) itemTextColor else itemIconTint,
+                    animationSpec = tween(animDuration),
+                    label = "SmoothBarItemTextColor"
                 )
 
                 Box(
@@ -141,7 +150,7 @@ fun SmoothBottomBar(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = item.label,
-                                    color = itemTextColor,
+                                    color = animatedTextColor,
                                     fontSize = itemTextSize,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1
@@ -154,4 +163,3 @@ fun SmoothBottomBar(
         }
     }
 }
-

@@ -78,27 +78,7 @@ fun FileManagerScreen(
     val topSurfaceColor = if (isDark) MaterialTheme.colorScheme.surface else Color.White
     val screenBg = if (isDark) MaterialTheme.colorScheme.background else Color(0xFFF7F7FA)
 
-    val view = LocalView.current
-    val activity = view.context as? ComponentActivity
-    LaunchedEffect(isDark) {
-        if (activity != null) {
-            val needDarkStatusIcons = !isDark
-            activity.enableEdgeToEdge(
-                statusBarStyle = if (needDarkStatusIcons) {
-                    SystemBarStyle.light(
-                        android.graphics.Color.TRANSPARENT,
-                        android.graphics.Color.TRANSPARENT
-                    )
-                } else {
-                    SystemBarStyle.dark(
-                        android.graphics.Color.TRANSPARENT
-                    )
-                }
-            )
-            val insetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-            insetsController.isAppearanceLightStatusBars = needDarkStatusIcons
-        }
-    }
+
 
     Column(
         modifier = Modifier
@@ -220,7 +200,7 @@ fun FileManagerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(

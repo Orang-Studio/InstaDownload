@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Vibrator
 import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -99,6 +100,10 @@ class MainActivity : ComponentActivity() {
             }
             InstaDownloadTheme(darkTheme = useDarkTheme) {
                 var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+
+                BackHandler(enabled = selectedTabIndex == 1) {
+                    selectedTabIndex = 0
+                }
                 var hasUnreadDownloads by rememberSaveable { mutableStateOf(false) }
 
                 val view = LocalView.current
@@ -165,34 +170,22 @@ class MainActivity : ComponentActivity() {
                     containerColor = Color.Transparent,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     bottomBar = {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            SmoothBottomBar(
-                                items = bottomBarItems,
-                                selectedIndex = selectedTabIndex,
-                                onItemSelected = { newIndex ->
-                                    selectedTabIndex = newIndex
-                                    if (newIndex == 1) {
-                                        hasUnreadDownloads = false
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .height(72.dp),
-                                backgroundColor = MaterialTheme.colorScheme.surfaceContainer,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
-                                indicatorRadius = 14.dp,
-                                itemTextColor = MaterialTheme.colorScheme.onSurface,
-                                itemTextSize = 12.sp,
-                                itemIconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                itemIconTintActive = MaterialTheme.colorScheme.primary,
-                                itemBadgeColor = Color(0xFFE91E63),
-                                itemAnimDurationMillis = 220
-                            )
-                        }
+                        SmoothBottomBar(
+                            items = bottomBarItems,
+                            selectedIndex = selectedTabIndex,
+                            onItemSelected = { newIndex ->
+                                selectedTabIndex = newIndex
+                                if (newIndex == 1) {
+                                    hasUnreadDownloads = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            backgroundColor = MaterialTheme.colorScheme.surfaceContainer,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
+                            indicatorRadius = 14.dp,
+                            itemTextColor = MaterialTheme.colorScheme.primary,
+                            itemIconTintActive = MaterialTheme.colorScheme.primary
+                        )
                     }
                 ) { innerPadding ->
                     Box(
