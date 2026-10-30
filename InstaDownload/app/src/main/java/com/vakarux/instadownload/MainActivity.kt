@@ -242,7 +242,7 @@ class MainActivity : ComponentActivity() {
             downloadComplete = false
             val items = runCatching {
                 withContext(Dispatchers.IO) {
-                    InstagramDownloader.getMediaItems(trimmed, targetWidth, sessionStore.session)
+                    InstagramDownloader.getMediaItems(trimmed, targetWidth, sessionStore.session, allStories = true)
                 }
             }
             isLoading = false
@@ -251,7 +251,11 @@ class MainActivity : ComponentActivity() {
                 return@LaunchedEffect
             }
             hapticStart(context, settings.hapticsEnabled)
-            media = items.getOrThrow()
+            media = items.getOrThrow().also { fetched ->
+                if (fetched.size > 1) {
+                    deselectedIndices = fetched.indices.filterNot { InstagramDownloader.isSharedStory(trimmed, fetched[it]) }.toSet()
+                }
+            }
         }
 
         viewerIndex?.let { index ->
@@ -627,16 +631,33 @@ class MainActivity : ComponentActivity() {
                         )
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
-                            Text(
-                                (if (items.size > 1) stringResource(R.string.items_count_format, items.size)
-                                    else stringResource(R.string.preview_label)) +
-                                    (items.firstOrNull { it.reduced }
-                                        ?.let { stringResource(R.string.data_saver_suffix_format, it.width) } ?: ""),
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = colorScheme.onSurface
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    (if (items.size > 1) stringResource(R.string.items_count_format, items.size)
+                                        else stringResource(R.string.preview_label)) +
+                                        (items.firstOrNull { it.reduced }
+                                            ?.let { stringResource(R.string.data_saver_suffix_format, it.width) } ?: ""),
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.weight(1f)
                                 )
-                            )
+                                if (items.size > 1) {
+                                    TextButton(onClick = {
+                                        deselectedIndices = if (deselectedIndices.isEmpty()) items.indices.toSet() else emptySet()
+                                    }) {
+                                        Text(
+                                            stringResource(if (deselectedIndices.isEmpty()) R.string.select_none_label else R.string.select_all_label),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
+                            }
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(
                                 modifier = Modifier

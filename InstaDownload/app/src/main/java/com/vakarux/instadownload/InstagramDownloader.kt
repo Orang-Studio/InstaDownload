@@ -89,6 +89,7 @@ object InstagramDownloader {
         .followRedirects(true)
         .cookieJar(cookieJar)
         .build()
+    private val sessionClient = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
 
     private val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
@@ -101,11 +102,17 @@ object InstagramDownloader {
     private val profileIds = mutableMapOf<String, String>()
     private val profilePics = mutableMapOf<String, String>()
 
-    fun getMediaItems(postUrl: String, targetWidth: Int = Int.MAX_VALUE, session: IgSession? = null): List<MediaResult> {
+    fun getMediaItems(
+        postUrl: String,
+        targetWidth: Int = Int.MAX_VALUE,
+        session: IgSession? = null,
+        allStories: Boolean = false,
+    ): List<MediaResult> {
         extractStoryMediaId(postUrl)?.let { mediaId ->
             val s = session ?: throw UnsupportedOperationException(
                 "Stories are login-only. Tap Log in to Instagram, then try again."
             )
+            if (allStories) runCatching { storyReel(postUrl, mediaId, s, targetWidth) }.getOrNull()?.let { return it }
             return tryMediaInfoApi(mediaId, s, targetWidth)
         }
 
@@ -141,19 +148,65 @@ object InstagramDownloader {
         )
     }
 
-    private fun tryMediaInfoApi(mediaId: String, session: IgSession, targetWidth: Int): List<MediaResult> {
-        val cookie = listOfNotNull(
-            "sessionid=${session.sessionId}",
-            session.csrfToken?.let { "csrftoken=$it" },
-            session.userId?.let { "ds_user_id=$it" },
-        ).joinToString("; ")
+    private fun sessionCookie(session: IgSession) = listOfNotNull(
+        "sessionid=${session.sessionId}",
+        session.csrfToken?.let { "csrftoken=$it" },
+        session.userId?.let { "ds_user_id=$it" },
+    ).joinToString("; ")
 
-        val resp = client.newCall(
+    private fun storyReel(storyUrl: String, mediaId: String, session: IgSession, targetWidth: Int): List<MediaResult>? {
+        val username = STORY_REGEX.matcher(storyUrl).takeIf { it.find() }?.group(1) ?: return null
+        val html = sessionClient.newCall(
+            Request.Builder()
+                .url("https://www.instagram.com/stories/$username/?r=1")
+                .header("User-Agent", DESKTOP_UA)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Cookie", sessionCookie(session))
+                .get().build()
+        ).execute().use { it.body?.string() } ?: return null
+
+        val items = Regex("""<script\b[^>]*\bdata-sjs[^>]*>(\{.+?\})</script>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(html)
+            .filter { it.groupValues[1].contains("xdt_api__v1__feed__reels_media") }
+            .mapNotNull { runCatching { findKey(JSONObject(it.groupValues[1]), "xdt_api__v1__feed__reels_media") }.getOrNull() }
+            .firstNotNullOfOrNull { (it as? JSONObject)?.optJSONArray("reels_media")?.optJSONObject(0)?.optJSONArray("items") }
+            ?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it) } }
+            ?.takeIf { list -> list.any { it.optString("pk") == mediaId } }
+            ?: return null
+
+        return items.mapNotNull { item ->
+            val pk = item.optString("pk")
+            item.put("user", (item.optJSONObject("user") ?: JSONObject()).put("username", username))
+            extractSingleStoryItem(item, targetWidth)?.copy(
+                baseName = postBaseName(item, item.optString("code").ifBlank { pk }),
+                meta = postMeta(item, InstagramPostRef("p", "")).copy(url = "https://www.instagram.com/stories/$username/$pk/"),
+            )
+        }.ifEmpty { null }
+    }
+
+    private fun findKey(value: Any?, key: String): Any? {
+        when (value) {
+            is JSONObject -> {
+                if (value.has(key)) return value.opt(key)
+                value.keys().forEach { k -> findKey(value.opt(k), key)?.let { return it } }
+            }
+            is JSONArray -> for (i in 0 until value.length()) findKey(value.opt(i), key)?.let { return it }
+        }
+        return null
+    }
+
+    fun isSharedStory(url: String, item: MediaResult): Boolean =
+        extractStoryMediaId(url)?.let { item.meta?.url?.endsWith("/$it/") } ?: true
+
+    private fun tryMediaInfoApi(mediaId: String, session: IgSession, targetWidth: Int): List<MediaResult> {
+        val resp = sessionClient.newCall(
             Request.Builder()
                 .url("https://www.instagram.com/api/v1/media/$mediaId/info/")
                 .header("User-Agent", DESKTOP_UA)
                 .header("X-IG-App-ID", IG_APP_ID)
-                .header("Cookie", cookie)
+                .header("Cookie", sessionCookie(session))
                 .get().build()
         ).execute()
 
