@@ -30,6 +30,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -1081,7 +1082,7 @@ class MainActivity : ComponentActivity() {
                     .size(width = 120.dp, height = 150.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.Black.copy(alpha = 0.15f))
-                    .clickable(onClick = onOpen),
+                    .combinedClickable(onClick = if (isCarousel) onToggleSelected else onOpen, onLongClick = onOpen),
                 contentAlignment = Alignment.Center
             ) {
                 val bmp = bitmap
