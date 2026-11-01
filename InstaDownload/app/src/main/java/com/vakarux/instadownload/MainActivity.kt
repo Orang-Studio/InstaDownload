@@ -15,8 +15,12 @@ import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -104,7 +108,18 @@ class MainActivity : ComponentActivity() {
     ) { _ -> /* permission result handled inline */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
         if (savedInstanceState == null) showLibrary.value = intent.getBooleanExtra(EXTRA_OPEN_LIBRARY, false)
@@ -118,6 +133,40 @@ class MainActivity : ComponentActivity() {
                 AppTheme.DARK -> true
             }
             InstaDownloadTheme(darkTheme = useDarkTheme) {
+                val view = LocalView.current
+                val activity = view.context as? ComponentActivity
+                val needDarkStatusIcons = showLibrary.value && !useDarkTheme
+
+                LaunchedEffect(showLibrary.value, useDarkTheme) {
+                    if (activity != null) {
+                        activity.enableEdgeToEdge(
+                            statusBarStyle = if (needDarkStatusIcons) {
+                                SystemBarStyle.light(
+                                    android.graphics.Color.TRANSPARENT,
+                                    android.graphics.Color.TRANSPARENT
+                                )
+                            } else {
+                                SystemBarStyle.dark(
+                                    android.graphics.Color.TRANSPARENT
+                                )
+                            },
+                            navigationBarStyle = if (!useDarkTheme) {
+                                SystemBarStyle.light(
+                                    android.graphics.Color.TRANSPARENT,
+                                    android.graphics.Color.TRANSPARENT
+                                )
+                            } else {
+                                SystemBarStyle.dark(
+                                    android.graphics.Color.TRANSPARENT
+                                )
+                            }
+                        )
+                        val insetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                        insetsController.isAppearanceLightStatusBars = needDarkStatusIcons
+                        insetsController.isAppearanceLightNavigationBars = !useDarkTheme
+                    }
+                }
+
                 InstagramDownloaderScreen(
                     initialUrl = sharedUrl.value.url,
                     initialUrlKey = sharedUrl.value,
@@ -255,27 +304,64 @@ class MainActivity : ComponentActivity() {
         }
 
         Scaffold(
+            topBar = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                ) {
+                    AnimatedVisibility(
+                        visible = isLoading,
+                        enter = fadeIn(tween(150)),
+                        exit = fadeOut(tween(150)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.3f)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onOpenLibrary) {
+                            Text(
+                                stringResource(R.string.downloads_label),
+                                color = Color.White
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { showSettings = true },
+                            modifier = Modifier.size(44.dp),
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = Color.Black.copy(alpha = 0.22f),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Settings,
+                                contentDescription = "Settings",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = Color.Transparent,
             modifier = Modifier
+                .fillMaxSize()
                 .background(igGradient)
                 .imePadding()
         ) { innerPadding ->
-
-            // Loading bar — top of screen
-            AnimatedVisibility(
-                visible = isLoading,
-                enter = fadeIn(tween(150)),
-                exit = fadeOut(tween(150)),
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxWidth()
-            ) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    trackColor = Color.White.copy(alpha = 0.3f)
-                )
-            }
 
             Column(
                 modifier = Modifier
@@ -287,7 +373,7 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.Center
             ) {
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // ── Hero ──────────────────────────────────────────
                 Box(
