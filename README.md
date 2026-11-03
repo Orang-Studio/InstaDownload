@@ -134,7 +134,7 @@ InstaDownload is not affiliated with, endorsed by, or associated with Instagram 
 
 ## Help and documentation
 
-Additional information is available in the project [Wiki](https://github.com/Orang-Studio/InstaDownload/wiki).
+Additional information is available in the project [Wiki](https://wiki.oranges.lt/instadownload/).
 
 For bugs or feature requests, use [GitHub Issues](https://github.com/Orang-Studio/InstaDownload/issues).
 
