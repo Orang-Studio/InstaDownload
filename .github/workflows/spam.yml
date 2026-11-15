@@ -1,6 +1,10 @@
 name: Close spam
 
 on:
+  issues:
+    types: [opened, edited, reopened]
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
   schedule:
     - cron: '0 */2 * * *'
   workflow_dispatch:
@@ -23,15 +27,20 @@ jobs:
       - name: Close unfilled-template issues and spam PRs
         run: |
           python3 - <<'PY'
+          import base64
           import json
           import os
           import re
           import subprocess
           import sys
+
           TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
           TEMPLATE_MARKERS = (
               "a clear and concise description",
               "describe the solution you'd like",
+              "paste the error here",
+              "add link that gives the error above",
+              "[clear description of vulnerability]",
           )
 
           BOILERPLATE_RE = re.compile(
@@ -39,27 +48,33 @@ jobs:
                   r"^\*{0,2}describe the bug\*{0,2}$",
                   r"^a clear and concise description of what the bug is\.?$",
                   r"^\*{0,2}to reproduce\*{0,2}$",
-                  r"^steps to reproduce the behavior:?$",
+                  r"^steps to reproduce( the behavior)?:?$",
                   r"^\d+\.\s*go to\s*'[^']*'$",
                   r"^\d+\.\s*click on\s*'[^']*'$",
                   r"^\d+\.\s*scroll down to\s*'[^']*'$",
                   r"^\d+\.\s*see error$",
-                  r"^\*{0,2}expected behavior\*{0,2}$",
+                  r"^\d+\.\s*\[step \d+\]$",
+                  r"^\*{0,2}expected behavior\*{0,2}:?$",
                   r"^a clear and concise description of what you expected to happen\.?$",
+                  r"^\*{0,2}actual behavior\*{0,2}:?$",
                   r"^\*{0,2}screenshots\*{0,2}$",
                   r"^if applicable, add screenshots to help explain your problem\.?$",
-                  r"^\*{0,2}desktop\s*\(please complete the following information\):?\*{0,2}$",
-                  r"^\*{0,2}smartphone\s*\(please complete the following information\):?\*{0,2}$",
-                  r"^-\s*(os|device|browser|version):?\s*(\[e\.g\.[^\]]*\])?$",
+                  r"^\*{0,2}(desktop|smartphone|device info)\s*\(please complete the following information\):?\*{0,2}$",
+                  r"^-\s*(os|device|browser|version|oranglauncher version|java version installed):?\s*(\[[^\]]*\])?$",
                   r"^\*{0,2}additional context\*{0,2}$",
-                  r"^add any other context about the problem here\.?$",
+                  r"^add any other context.*here\.?$",
                   r"^\*{0,2}is your feature request related to a problem\?\s*please describe\.\*{0,2}$",
                   r"^a clear and concise description of what the problem is\.\s*ex\. i'm always frustrated when \[\.\.\.\]$",
                   r"^\*{0,2}describe the solution you'd like\*{0,2}$",
                   r"^a clear and concise description of what you want to happen\.?$",
                   r"^\*{0,2}describe alternatives you've considered\*{0,2}$",
-                  r"^a clear and concise description of any alternative solutions or features you've considered\.?$",
-                  r"^add any other context about the feature request here\.?$",
+                  r"^a clear and concise description of any alternative (solutions or features you've considered|apps that have this feature)\.?$",
+                  r"^\*{0,2}why would devs/users need it\?\*{0,2}$",
+                  r"^a explain the usage and for devs why it would be good\.?$",
+                  r"^\*{0,2}add the error message\*{0,2}$",
+                  r"^paste the error here\.?$",
+                  r"^\*{0,2}add link that gives the error above\*{0,2}$",
+                  r"^https?://(www\.)?instagram\.com/reel/shortcode/?$",
               ]),
               re.IGNORECASE,
           )
@@ -114,6 +129,42 @@ jobs:
                   print(f"::warning::gh {' '.join(args)} failed: {msg}", file=sys.stderr)
               return res
 
+          def normalize_line(raw_line: str) -> str:
+              return raw_line.strip().lstrip("#").strip()
+
+          def load_repo_template_lines() -> set[str]:
+              lines: set[str] = set()
+              res = run_gh("api", "repos/{owner}/{repo}/contents/.github/ISSUE_TEMPLATE")
+              if res.returncode != 0:
+                  return lines
+              try:
+                  entries = json.loads(res.stdout)
+              except Exception:
+                  return lines
+              if not isinstance(entries, list):
+                  return lines
+              for entry in entries:
+                  path = entry.get("path")
+                  if not path:
+                      continue
+                  f_res = run_gh("api", f"repos/{{owner}}/{{repo}}/contents/{path}")
+                  if f_res.returncode != 0:
+                      continue
+                  try:
+                      content_b64 = json.loads(f_res.stdout).get("content") or ""
+                      text = base64.b64decode(content_b64).decode("utf-8", errors="replace")
+                  except Exception:
+                      continue
+                  if text.startswith("---"):
+                      parts = text.split("---", 2)
+                      if len(parts) == 3:
+                          text = parts[2]
+                  for raw in text.splitlines():
+                      norm = normalize_line(raw).lower()
+                      if norm:
+                          lines.add(norm)
+              return lines
+
           def graphql_paginate(query: str, field: str, max_pages: int = 2) -> list[dict]:
               items: list[dict] = []
               cursor: str | None = None
@@ -155,16 +206,21 @@ jobs:
               login = author.get("login") or ""
               return author.get("__typename") == "Bot" or login.endswith("[bot]")
 
+          REPO_TEMPLATE_LINES = load_repo_template_lines()
+
           def is_unfilled_template(body: str) -> bool:
               if not body:
                   return False
               lower = body.lower()
-              if not any(marker in lower for marker in TEMPLATE_MARKERS):
+              has_marker = any(marker in lower for marker in TEMPLATE_MARKERS) or any(
+                  normalize_line(r).lower() in REPO_TEMPLATE_LINES for r in body.splitlines() if normalize_line(r)
+              )
+              if not has_marker:
                   return False
               remaining = []
               for raw_line in body.splitlines():
-                  line = raw_line.strip().lstrip("#").strip()
-                  if not line or BOILERPLATE_RE.match(line):
+                  line = normalize_line(raw_line)
+                  if not line or BOILERPLATE_RE.match(line) or line.lower() in REPO_TEMPLATE_LINES:
                       continue
                   remaining.append(line)
               return len(re.sub(r"\s+", "", "".join(remaining))) < 15
@@ -176,6 +232,7 @@ jobs:
 
           def mark_as_spam(kind: str, item: dict, comment: str, can_label: bool, lock: bool) -> None:
               num = str(item["number"])
+              print(f"Closing {kind} #{num}: {comment}")
               existing_labels = {l.get("name") for l in ((item.get("labels") or {}).get("nodes") or [])}
               if can_label and "spam" not in existing_labels:
                   run_gh(kind, "edit", num, "--add-label", "spam")
