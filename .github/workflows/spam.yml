@@ -248,8 +248,6 @@ jobs:
           can_label = ensure_spam_label()
 
           for issue in graphql_paginate(ISSUES_QUERY, "issues"):
-              if is_trusted_author(issue):
-                  continue
               if is_unfilled_template(issue.get("body") or ""):
                   mark_as_spam(
                       "issue",
