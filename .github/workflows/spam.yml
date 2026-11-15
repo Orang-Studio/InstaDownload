@@ -1,0 +1,244 @@
+name: Close spam
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Close unfilled-template issues and spam PRs
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+          TEMPLATE_MARKERS = (
+              "a clear and concise description",
+              "describe the solution you'd like",
+          )
+
+          BOILERPLATE_RE = re.compile(
+              "|".join([
+                  r"^\*{0,2}describe the bug\*{0,2}$",
+                  r"^a clear and concise description of what the bug is\.?$",
+                  r"^\*{0,2}to reproduce\*{0,2}$",
+                  r"^steps to reproduce the behavior:?$",
+                  r"^\d+\.\s*go to\s*'[^']*'$",
+                  r"^\d+\.\s*click on\s*'[^']*'$",
+                  r"^\d+\.\s*scroll down to\s*'[^']*'$",
+                  r"^\d+\.\s*see error$",
+                  r"^\*{0,2}expected behavior\*{0,2}$",
+                  r"^a clear and concise description of what you expected to happen\.?$",
+                  r"^\*{0,2}screenshots\*{0,2}$",
+                  r"^if applicable, add screenshots to help explain your problem\.?$",
+                  r"^\*{0,2}desktop\s*\(please complete the following information\):?\*{0,2}$",
+                  r"^\*{0,2}smartphone\s*\(please complete the following information\):?\*{0,2}$",
+                  r"^-\s*(os|device|browser|version):?\s*(\[e\.g\.[^\]]*\])?$",
+                  r"^\*{0,2}additional context\*{0,2}$",
+                  r"^add any other context about the problem here\.?$",
+                  r"^\*{0,2}is your feature request related to a problem\?\s*please describe\.\*{0,2}$",
+                  r"^a clear and concise description of what the problem is\.\s*ex\. i'm always frustrated when \[\.\.\.\]$",
+                  r"^\*{0,2}describe the solution you'd like\*{0,2}$",
+                  r"^a clear and concise description of what you want to happen\.?$",
+                  r"^\*{0,2}describe alternatives you've considered\*{0,2}$",
+                  r"^a clear and concise description of any alternative solutions or features you've considered\.?$",
+                  r"^add any other context about the feature request here\.?$",
+              ]),
+              re.IGNORECASE,
+          )
+
+          ISSUES_QUERY = """
+          query($owner: String!, $name: String!, $cursor: String) {
+            repository(owner: $owner, name: $name) {
+              issues(states: OPEN, first: 100, after: $cursor, orderBy: {field: CREATED_AT, direction: DESC}) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  number
+                  body
+                  locked
+                  authorAssociation
+                  author { __typename login }
+                  labels(first: 20) { nodes { name } }
+                }
+              }
+            }
+          }
+          """
+
+          PRS_QUERY = """
+          query($owner: String!, $name: String!, $cursor: String) {
+            repository(owner: $owner, name: $name) {
+              pullRequests(states: OPEN, first: 100, after: $cursor, orderBy: {field: CREATED_AT, direction: DESC}) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  number
+                  body
+                  locked
+                  isDraft
+                  authorAssociation
+                  author { __typename login }
+                  changedFiles
+                  additions
+                  deletions
+                  labels(first: 20) { nodes { name } }
+                  files(first: 100) { nodes { path additions deletions } }
+                }
+              }
+            }
+          }
+          """
+
+          def run_gh(*args: str, check: bool = False) -> subprocess.CompletedProcess:
+              res = subprocess.run(["gh", *args], text=True, capture_output=True)
+              if res.returncode != 0:
+                  msg = (res.stderr or res.stdout or f"exit {res.returncode}").strip()
+                  if check:
+                      raise RuntimeError(f"gh {' '.join(args)} failed: {msg}")
+                  print(f"::warning::gh {' '.join(args)} failed: {msg}", file=sys.stderr)
+              return res
+
+          def graphql_paginate(query: str, field: str, max_pages: int = 2) -> list[dict]:
+              items: list[dict] = []
+              cursor: str | None = None
+              for _ in range(max_pages):
+                  args = [
+                      "api", "graphql",
+                      "-F", "owner={owner}",
+                      "-F", "name={repo}",
+                      "-f", f"query={query}",
+                  ]
+                  if cursor:
+                      args.extend(["-F", f"cursor={cursor}"])
+                  res = run_gh(*args, check=True)
+                  conn = json.loads(res.stdout)["data"]["repository"][field]
+                  items.extend(conn.get("nodes") or [])
+                  page_info = conn.get("pageInfo") or {}
+                  if not page_info.get("hasNextPage"):
+                      break
+                  cursor = page_info.get("endCursor")
+              return items
+
+          def ensure_spam_label() -> bool:
+              res = run_gh("label", "list", "--search", "spam", "--limit", "100", "--json", "name")
+              if res.returncode == 0:
+                  labels = {l.get("name") for l in json.loads(res.stdout)}
+                  if "spam" in labels:
+                      return True
+              created = run_gh(
+                  "label", "create", "spam",
+                  "--color", "d93f0b",
+                  "--description", "Spam",
+              )
+              return created.returncode == 0
+
+          def is_trusted_author(item: dict) -> bool:
+              if item.get("authorAssociation") in TRUSTED_ASSOCIATIONS:
+                  return True
+              author = item.get("author") or {}
+              login = author.get("login") or ""
+              return author.get("__typename") == "Bot" or login.endswith("[bot]")
+
+          def is_unfilled_template(body: str) -> bool:
+              if not body:
+                  return False
+              lower = body.lower()
+              if not any(marker in lower for marker in TEMPLATE_MARKERS):
+                  return False
+              remaining = []
+              for raw_line in body.splitlines():
+                  line = raw_line.strip().lstrip("#").strip()
+                  if not line or BOILERPLATE_RE.match(line):
+                      continue
+                  remaining.append(line)
+              return len(re.sub(r"\s+", "", "".join(remaining))) < 15
+
+          def is_docs_path(path: str) -> bool:
+              lower = path.lower()
+              base = os.path.basename(lower)
+              return base.startswith("readme") or lower.endswith(".md") or lower.startswith("docs/")
+
+          def mark_as_spam(kind: str, item: dict, comment: str, can_label: bool, lock: bool) -> None:
+              num = str(item["number"])
+              existing_labels = {l.get("name") for l in ((item.get("labels") or {}).get("nodes") or [])}
+              if can_label and "spam" not in existing_labels:
+                  run_gh(kind, "edit", num, "--add-label", "spam")
+
+              close_args = [kind, "close", num, "-c", comment]
+              if kind == "issue":
+                  close_args.extend(["--reason", "not planned"])
+              run_gh(*close_args)
+
+              if lock and not item.get("locked"):
+                  run_gh(kind, "lock", num, "--reason", "spam")
+
+          can_label = ensure_spam_label()
+
+          for issue in graphql_paginate(ISSUES_QUERY, "issues"):
+              if is_trusted_author(issue):
+                  continue
+              if is_unfilled_template(issue.get("body") or ""):
+                  mark_as_spam(
+                      "issue",
+                      issue,
+                      "Auto-closed: template was left unfilled.",
+                      can_label,
+                      lock=True,
+                  )
+
+          for pr in graphql_paginate(PRS_QUERY, "pullRequests"):
+              if is_trusted_author(pr) or pr.get("isDraft"):
+                  continue
+
+              changed_files = pr.get("changedFiles") or 0
+              total = (pr.get("additions") or 0) + (pr.get("deletions") or 0)
+              files = (pr.get("files") or {}).get("nodes") or []
+              if changed_files == 0:
+                  mark_as_spam(
+                      "pr",
+                      pr,
+                      "Auto-closed: PR has no changes.",
+                      can_label,
+                      lock=False,
+                  )
+                  continue
+              paths = [f["path"] for f in files if f and f.get("path")]
+              if (
+                  paths
+                  and len(paths) == changed_files
+                  and 0 < total <= 10
+                  and all(is_docs_path(p) for p in paths)
+              ):
+                  mark_as_spam(
+                      "pr",
+                      pr,
+                      f"Auto-closed: trivial README/docs-only edit ({total} lines). Not accepted - this repo doesn't need README name/author tweaks.",
+                      can_label,
+                      lock=True,
+                  )
+                  continue
+              if 0 < total <= 2 and len((pr.get("body") or "").strip()) < 20:
+                  mark_as_spam(
+                      "pr",
+                      pr,
+                      f"Auto-closed: PR changes {total} line(s) total without explanation.",
+                      can_label,
+                      lock=False,
+                  )
+          PY
