@@ -34,6 +34,10 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("haptics", true)
         set(value) = prefs.edit().putBoolean("haptics", value).apply()
 
+    var openLibraryAfterDownload: Boolean
+        get() = prefs.getBoolean("open_library_after_download", true)
+        set(value) = prefs.edit().putBoolean("open_library_after_download", value).apply()
+
     var theme: AppTheme
         get() = enumValue(prefs.getString("theme", null), AppTheme.SYSTEM)
         set(value) = prefs.edit().putString("theme", value.name).apply()

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -52,6 +53,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -132,55 +134,68 @@ class MainActivity : ComponentActivity() {
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
             }
-            InstaDownloadTheme(darkTheme = useDarkTheme) {
-                val view = LocalView.current
-                val activity = view.context as? ComponentActivity
-                val needDarkStatusIcons = showLibrary.value && !useDarkTheme
-
-                LaunchedEffect(showLibrary.value, useDarkTheme) {
-                    if (activity != null) {
-                        activity.enableEdgeToEdge(
-                            statusBarStyle = if (needDarkStatusIcons) {
-                                SystemBarStyle.light(
-                                    android.graphics.Color.TRANSPARENT,
-                                    android.graphics.Color.TRANSPARENT
-                                )
-                            } else {
-                                SystemBarStyle.dark(
-                                    android.graphics.Color.TRANSPARENT
-                                )
-                            },
-                            navigationBarStyle = if (!useDarkTheme) {
-                                SystemBarStyle.light(
-                                    android.graphics.Color.TRANSPARENT,
-                                    android.graphics.Color.TRANSPARENT
-                                )
-                            } else {
-                                SystemBarStyle.dark(
-                                    android.graphics.Color.TRANSPARENT
-                                )
-                            }
-                        )
-                        val insetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-                        insetsController.isAppearanceLightStatusBars = needDarkStatusIcons
-                        insetsController.isAppearanceLightNavigationBars = !useDarkTheme
+            val systemUriHandler = LocalUriHandler.current
+            // SecurityException refusal of opening a link
+            val safeUriHandler = remember(systemUriHandler) {
+                object : UriHandler {
+                    override fun openUri(uri: String) {
+                        runCatching { systemUriHandler.openUri(uri) }.onFailure {
+                            Toast.makeText(this@MainActivity, R.string.open_link_failed, Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
+            }
+            CompositionLocalProvider(LocalUriHandler provides safeUriHandler) {
+                InstaDownloadTheme(darkTheme = useDarkTheme) {
+                    val view = LocalView.current
+                    val activity = view.context as? ComponentActivity
+                    val needDarkStatusIcons = showLibrary.value && !useDarkTheme
 
-                InstagramDownloaderScreen(
-                    initialUrl = sharedUrl.value.url,
-                    initialUrlKey = sharedUrl.value,
-                    useDarkTheme = useDarkTheme,
-                    settings = settings,
-                    selectedFolderName = selectedFolderName.value,
-                    onChooseFolder = { folderPickerLauncher.launch(null) },
-                    onThemeChanged = { selectedTheme = it },
-                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
-                    onOpenLibrary = { showLibrary.value = true },
-                    onDownloadsSaved = { showLibrary.value = true }
-                )
-                if (showLibrary.value) {
-                    DownloadsDialog(onDismiss = { showLibrary.value = false })
+                    LaunchedEffect(showLibrary.value, useDarkTheme) {
+                        if (activity != null) {
+                            activity.enableEdgeToEdge(
+                                statusBarStyle = if (needDarkStatusIcons) {
+                                    SystemBarStyle.light(
+                                        android.graphics.Color.TRANSPARENT,
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                } else {
+                                    SystemBarStyle.dark(
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                },
+                                navigationBarStyle = if (!useDarkTheme) {
+                                    SystemBarStyle.light(
+                                        android.graphics.Color.TRANSPARENT,
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                } else {
+                                    SystemBarStyle.dark(
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                }
+                            )
+                            val insetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                            insetsController.isAppearanceLightStatusBars = needDarkStatusIcons
+                            insetsController.isAppearanceLightNavigationBars = !useDarkTheme
+                        }
+                    }
+
+                    InstagramDownloaderScreen(
+                        initialUrl = sharedUrl.value.url,
+                        initialUrlKey = sharedUrl.value,
+                        useDarkTheme = useDarkTheme,
+                        settings = settings,
+                        selectedFolderName = selectedFolderName.value,
+                        onChooseFolder = { folderPickerLauncher.launch(null) },
+                        onThemeChanged = { selectedTheme = it },
+                        onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
+                        onOpenLibrary = { showLibrary.value = true },
+                        onDownloadsSaved = { if (settings.openLibraryAfterDownload) showLibrary.value = true }
+                    )
+                    if (showLibrary.value) {
+                        DownloadsDialog(onDismiss = { showLibrary.value = false })
+                    }
                 }
             }
         }
@@ -919,6 +934,7 @@ class MainActivity : ComponentActivity() {
         var quality by remember { mutableStateOf(settings.quality) }
         var customWidth by remember { mutableIntStateOf(settings.customWidth) }
         var haptics by remember { mutableStateOf(settings.hapticsEnabled) }
+        var openLibrary by remember { mutableStateOf(settings.openLibraryAfterDownload) }
         var theme by remember { mutableStateOf(settings.theme) }
 
         AlertDialog(
@@ -990,6 +1006,22 @@ class MainActivity : ComponentActivity() {
                             onCheckedChange = {
                                 haptics = it
                                 settings.hapticsEnabled = it
+                            }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.open_library_label), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.open_library_description), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            checked = openLibrary,
+                            onCheckedChange = {
+                                openLibrary = it
+                                settings.openLibraryAfterDownload = it
                             }
                         )
                     }
