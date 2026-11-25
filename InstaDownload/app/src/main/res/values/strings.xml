@@ -110,6 +110,9 @@
     <string name="appearance_heading">Appearance</string>
     <string name="haptic_feedback_label">Haptic feedback</string>
     <string name="haptic_feedback_description">Vibrate for download events</string>
+    <string name="open_library_label">Open downloads after saving</string>
+    <string name="open_library_description">Show the downloads screen when a download finishes</string>
+    <string name="open_link_failed">No app could open this link</string>
     <string name="done_button">Done</string>
 
     <string name="selected_folder_default">Selected folder</string>

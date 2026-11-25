@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -15,8 +16,12 @@ import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -48,6 +53,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -111,7 +117,18 @@ class MainActivity : ComponentActivity() {
     ) { loggedIn.value = sessionStore.isLoggedIn }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         loggedIn.value = sessionStore.isLoggedIn
         selectedFolderName.value = appSettings.downloadFolderName
         sharedUrl.value = SharedUrl(handleSharedIntent(intent))
@@ -125,27 +142,74 @@ class MainActivity : ComponentActivity() {
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
             }
-            InstaDownloadTheme(darkTheme = useDarkTheme) {
-                InstagramDownloaderScreen(
-                    initialUrl = sharedUrl.value.url,
-                    initialUrlKey = sharedUrl.value,
-                    useDarkTheme = useDarkTheme,
-                    isLoggedIn = loggedIn.value,
-                    onLoginClick = { loginLauncher.launch(Intent(this, LoginActivity::class.java)) },
-                    onLogoutClick = {
-                        sessionStore.clear()
-                        loggedIn.value = false
-                    },
-                    settings = settings,
-                    selectedFolderName = selectedFolderName.value,
-                    onChooseFolder = { folderPickerLauncher.launch(null) },
-                    onThemeChanged = { selectedTheme = it },
-                    onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
-                    onOpenLibrary = { showLibrary.value = true },
-                    onDownloadsSaved = { showLibrary.value = true }
-                )
-                if (showLibrary.value) {
-                    DownloadsDialog(onDismiss = { showLibrary.value = false })
+            val systemUriHandler = LocalUriHandler.current
+            // SecurityException refusal of opening a link
+            val safeUriHandler = remember(systemUriHandler) {
+                object : UriHandler {
+                    override fun openUri(uri: String) {
+                        runCatching { systemUriHandler.openUri(uri) }.onFailure {
+                            Toast.makeText(this@MainActivity, R.string.open_link_failed, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            CompositionLocalProvider(LocalUriHandler provides safeUriHandler) {
+                InstaDownloadTheme(darkTheme = useDarkTheme) {
+                    val view = LocalView.current
+                    val activity = view.context as? ComponentActivity
+                    val needDarkStatusIcons = showLibrary.value && !useDarkTheme
+
+                    LaunchedEffect(showLibrary.value, useDarkTheme) {
+                        if (activity != null) {
+                            activity.enableEdgeToEdge(
+                                statusBarStyle = if (needDarkStatusIcons) {
+                                    SystemBarStyle.light(
+                                        android.graphics.Color.TRANSPARENT,
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                } else {
+                                    SystemBarStyle.dark(
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                },
+                                navigationBarStyle = if (!useDarkTheme) {
+                                    SystemBarStyle.light(
+                                        android.graphics.Color.TRANSPARENT,
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                } else {
+                                    SystemBarStyle.dark(
+                                        android.graphics.Color.TRANSPARENT
+                                    )
+                                }
+                            )
+                            val insetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                            insetsController.isAppearanceLightStatusBars = needDarkStatusIcons
+                            insetsController.isAppearanceLightNavigationBars = !useDarkTheme
+                        }
+                    }
+
+                    InstagramDownloaderScreen(
+                        initialUrl = sharedUrl.value.url,
+                        initialUrlKey = sharedUrl.value,
+                        useDarkTheme = useDarkTheme,
+                        isLoggedIn = loggedIn.value,
+                        onLoginClick = { loginLauncher.launch(Intent(this, LoginActivity::class.java)) },
+                        onLogoutClick = {
+                            sessionStore.clear()
+                            loggedIn.value = false
+                        },
+                        settings = settings,
+                        selectedFolderName = selectedFolderName.value,
+                        onChooseFolder = { folderPickerLauncher.launch(null) },
+                        onThemeChanged = { selectedTheme = it },
+                        onFolderAccessLost = { selectedFolderName.value = AppSettings.DEFAULT_FOLDER_NAME },
+                        onOpenLibrary = { showLibrary.value = true },
+                        onDownloadsSaved = { if (settings.openLibraryAfterDownload) showLibrary.value = true }
+                    )
+                    if (showLibrary.value) {
+                        DownloadsDialog(onDismiss = { showLibrary.value = false })
+                    }
                 }
             }
         }
@@ -162,6 +226,10 @@ class MainActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
             if (isValidInstagramUrl(text)) return text
+        }
+        if (intent.action == Intent.ACTION_VIEW) {
+            val link = intent.dataString ?: ""
+            if (isValidInstagramUrl(link)) return link
         }
         return ""
     }
@@ -279,27 +347,64 @@ class MainActivity : ComponentActivity() {
         }
 
         Scaffold(
+            topBar = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                ) {
+                    AnimatedVisibility(
+                        visible = isLoading,
+                        enter = fadeIn(tween(150)),
+                        exit = fadeOut(tween(150)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.3f)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onOpenLibrary) {
+                            Text(
+                                stringResource(R.string.downloads_label),
+                                color = Color.White
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { showSettings = true },
+                            modifier = Modifier.size(44.dp),
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = Color.Black.copy(alpha = 0.22f),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Settings,
+                                contentDescription = "Settings",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = Color.Transparent,
             modifier = Modifier
+                .fillMaxSize()
                 .background(igGradient)
                 .imePadding()
         ) { innerPadding ->
-
-            // Loading bar — top of screen
-            AnimatedVisibility(
-                visible = isLoading,
-                enter = fadeIn(tween(150)),
-                exit = fadeOut(tween(150)),
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxWidth()
-            ) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    trackColor = Color.White.copy(alpha = 0.3f)
-                )
-            }
 
             Column(
                 modifier = Modifier
@@ -311,7 +416,7 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.Center
             ) {
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // ── Hero ──────────────────────────────────────────
                 Box(
@@ -906,6 +1011,7 @@ class MainActivity : ComponentActivity() {
         var quality by remember { mutableStateOf(settings.quality) }
         var customWidth by remember { mutableIntStateOf(settings.customWidth) }
         var haptics by remember { mutableStateOf(settings.hapticsEnabled) }
+        var openLibrary by remember { mutableStateOf(settings.openLibraryAfterDownload) }
         var theme by remember { mutableStateOf(settings.theme) }
 
         AlertDialog(
@@ -994,6 +1100,22 @@ class MainActivity : ComponentActivity() {
                             onCheckedChange = {
                                 haptics = it
                                 settings.hapticsEnabled = it
+                            }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.open_library_label), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.open_library_description), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            checked = openLibrary,
+                            onCheckedChange = {
+                                openLibrary = it
+                                settings.openLibraryAfterDownload = it
                             }
                         )
                     }
