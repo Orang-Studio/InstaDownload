@@ -11,7 +11,7 @@ android {
         applicationId = "com.vakarux.instadownload"
         minSdk = 24  // Android 7.0 (Nougat)
         targetSdk = 36
-        versionCode = 23
+        versionCode = 24
         versionName = "3.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

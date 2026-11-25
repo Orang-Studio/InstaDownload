@@ -366,7 +366,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Icon(
                                 imageVector = AppIcons.Settings,
-                                contentDescription = "Settings",
+                                contentDescription = stringResource(R.string.settings_content_description),
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -826,29 +826,6 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            Row(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onOpenLibrary) {
-                    Text(
-                        stringResource(R.string.downloads_label),
-                        color = Color.White
-                    )
-                }
-                IconButton(
-                    onClick = { showSettings = true },
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color.Black.copy(alpha = 0.18f),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Icon(AppIcons.Settings, contentDescription = stringResource(R.string.settings_content_description))
-                }
-            }
         }
 
         profileToBrowse?.let { username ->
