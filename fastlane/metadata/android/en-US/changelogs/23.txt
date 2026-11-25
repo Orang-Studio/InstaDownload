@@ -1,0 +1,1 @@
+Instagram links can now open straight in InstaDownload. Added an option to open the library after a download, fixed a crash when no app can open a link, and fixed the status bar colors.
