@@ -213,6 +213,10 @@ class MainActivity : ComponentActivity() {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
             if (isValidInstagramUrl(text)) return text
         }
+        if (intent.action == Intent.ACTION_VIEW) {
+            val link = intent.dataString ?: ""
+            if (isValidInstagramUrl(link)) return link
+        }
         return ""
     }
 
